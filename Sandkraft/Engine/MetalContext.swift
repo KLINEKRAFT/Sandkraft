@@ -116,29 +116,29 @@ enum QualityTier: Int, CaseIterable, Identifiable, Codable, Sendable {
     /// nothing else.
     var terrainGrid: Int {
         switch self {
-        case .low:    return 256
-        case .medium: return 320
-        case .high:   return 448
-        case .ultra:  return 576
+        case .low:    return 192
+        case .medium: return 288
+        case .high:   return 384
+        case .ultra:  return 480
         }
     }
 
     /// The coarse sheet that carries the coast out to ±340 m.
     var skirtGrid: Int {
         switch self {
-        case .low:    return 160
-        case .medium: return 192
-        case .high:   return 224
-        case .ultra:  return 256
+        case .low:    return 128
+        case .medium: return 160
+        case .high:   return 192
+        case .ultra:  return 224
         }
     }
 
     var waterGrid: Int {
         switch self {
-        case .low:    return 160
-        case .medium: return 200
-        case .high:   return 248
-        case .ultra:  return 296
+        case .low:    return 144
+        case .medium: return 176
+        case .high:   return 208
+        case .ultra:  return 240
         }
     }
 
@@ -148,11 +148,19 @@ enum QualityTier: Int, CaseIterable, Identifiable, Codable, Sendable {
     /// which MSAA cannot touch because they are shading, not geometry.
     var renderScale: Float {
         switch self {
-        case .low:    return 0.90
+        case .low:    return 0.85
         case .medium: return 1.00
-        case .high:   return 1.15
-        case .ultra:  return 1.30
+        case .high:   return 1.10
+        case .ultra:  return 1.25
         }
+    }
+
+    /// Vertex count of the beach mesh, for the settings screen. Computed here as
+    /// plain arithmetic for the same reason as `frameTimeDescription`.
+    var meshDescription: String {
+        let edge = terrainGrid - 1
+        let vertices = edge * edge * 6
+        return "\(vertices / 1000)k vertices"
     }
 
     var wantsBloom: Bool { self != .low }
@@ -203,12 +211,28 @@ final class MetalContext {
     }
 
     /// The tier this device can comfortably hold, before the player overrides it.
+    ///
+    /// Two rules, both learned the hard way:
+    ///
+    ///   · **Never auto-select `.ultra`.** "Maximum" is a thing somebody chooses
+    ///     after deciding they want their fans on, not a default.
+    ///   · **`supportsFamily` says what a GPU can *do*, not how big it is.** An M1
+    ///     Air and an M3 Max are both `.apple7`, and picking a tier off that alone
+    ///     hands a fanless laptop a 640² simulation and two million vertices.
+    ///     Working-set size is the cheapest honest proxy Metal exposes for size.
     var recommendedTier: QualityTier {
+        let workingSet = device.recommendedMaxWorkingSetSize
+        let gigabyte: UInt64 = 1024 * 1024 * 1024
+
         #if os(macOS)
-        return device.supportsFamily(.apple7) ? .ultra : .high
+        // Intel integrated graphics: everything below is beyond them.
+        guard device.supportsFamily(.apple7) else { return .low }
+        if workingSet >= 24 * gigabyte { return .high }        // Max / Ultra parts
+        if workingSet >= 12 * gigabyte { return .medium }      // Pro parts, 16 GB+
+        return .medium                                          // base M-series
         #else
-        if device.supportsFamily(.apple8) { return .high }
-        if device.supportsFamily(.apple6) { return .medium }
+        if device.supportsFamily(.apple8), workingSet >= 5 * gigabyte { return .medium }
+        if device.supportsFamily(.apple7) { return .low }
         return .low
         #endif
     }

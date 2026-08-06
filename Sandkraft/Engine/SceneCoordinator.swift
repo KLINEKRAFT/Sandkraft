@@ -96,6 +96,7 @@ final class SceneCoordinator: NSObject, ObservableObject {
             self?.approximateGroundHeight(at: p) ?? 0
         }
 
+        model.ingest(frameDuration: renderer.smoothedFrameDuration)
         drainEffects(dt: dt)
         audio.update(model: model, dt: dt)
     }

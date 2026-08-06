@@ -26,7 +26,12 @@ jobs:
           - name: macOS
             destination: "platform=macOS,arch=arm64"
           - name: iOS Simulator
-            destination: "platform=iOS Simulator,name=iPhone 16,OS=latest"
+            # Generic, not a named device. This job only builds — it never boots
+            # a simulator — and pinning "iPhone 16" made it depend on which
+            # runtimes happen to be installed on the runner image, which is not
+            # something this repository controls. It broke the first time the
+            # image was updated.
+            destination: "generic/platform=iOS Simulator"
 
     steps:
       - uses: actions/checkout@v4

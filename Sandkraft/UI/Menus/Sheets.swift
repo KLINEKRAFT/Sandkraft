@@ -299,6 +299,7 @@ struct SettingsView: View {
                 Toggle("Sound", isOn: $model.soundEnabled)
                 Toggle("Advanced readouts", isOn: $model.showAdvancedReadouts)
                 if model.showAdvancedReadouts {
+                    LabeledContent("Frame time", value: model.frameTimeDescription)
                     LabeledContent("Sand in play", value: String(format: "%.1f m³", model.metrics.totalVolume))
                     LabeledContent("Packed", value: String(format: "%.1f m³", model.metrics.packedVolume))
                     LabeledContent("Wetted", value: String(format: "%.0f m²", model.metrics.wettedArea))
@@ -316,6 +317,8 @@ struct SettingsView: View {
                     .foregroundStyle(Palette.secondaryText)
                 LabeledContent("Approximate memory",
                                value: "\(model.qualityTier.approximateMemoryMB) MB")
+                    .font(.caption)
+                LabeledContent("Beach mesh", value: model.qualityTier.meshDescription)
                     .font(.caption)
                 Text("""
                      Changing quality rebuilds the simulation, which means laying \
