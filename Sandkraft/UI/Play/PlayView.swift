@@ -427,7 +427,7 @@ struct ToolRail: View {
                 }
                 .buttonStyle(.plain)
 
-                BrushSizeRow(model: model)
+                BrushSizeChip(model: model, axis: axis)
             }
         case .place:
             Button { sheet = .adornment } label: {
@@ -446,48 +446,169 @@ struct ToolRail: View {
             }
             .buttonStyle(.plain)
         default:
-            BrushSizeRow(model: model)
+            BrushSizeChip(model: model, axis: axis)
         }
     }
 }
 
 // MARK: - Brush size and shape
 
-/// Size, and the footprint it applies to.
+/// The footprint, drawn. Shared by the chip and the editor so the little mark in
+/// the rail is literally the same shape as the option you picked.
+struct BrushShapeGlyph: View {
+    let shape: BrushShape
+
+    var body: some View {
+        switch shape {
+        case .round:
+            Circle().strokeBorder(lineWidth: 1.5)
+        case .square:
+            RoundedRectangle(cornerRadius: 2, style: .continuous).strokeBorder(lineWidth: 1.5)
+        }
+    }
+}
+
+/// What sits in the rail: the current footprint and the current size, and a way
+/// in to change them.
 ///
-/// Three things were wrong with the slider this replaces. It was linear over a
-/// 4.4× range, so every brush worth using lived in the first fifth of its
-/// travel. It read out a multiplier — "1.4×" of a constant the player has never
-/// been told. And it was the only way in, so a small correction meant a small
-/// drag on a small target.
+/// The first attempt put the whole control — two steppers, a slider, a readout
+/// and a shape toggle — inline. In the horizontal rail that is merely tight; in
+/// the vertical one it is impossible. That rail is `Metric.sidebarWidth + 12`
+/// wide, so after padding there are about eighty points to play with, and a
+/// slider sharing eighty points with four other controls is a slider with no
+/// width at all. Which is exactly how it shipped, and exactly how it looked.
 ///
-/// This is logarithmic, reads out in metres across, and has detents either side
-/// that match `[` and `]` exactly, so coarse work is two taps and fine work is
-/// still the slider.
-struct BrushSizeRow: View {
+/// So the rail carries the *reading* — always visible, no interaction needed —
+/// and the adjusting happens in a popover with room to do it in.
+struct BrushSizeChip: View {
+    @Bindable var model: GameModel
+    var axis: Axis
+
+    @State private var editing = false
+
+    var body: some View {
+        Button {
+            editing = true
+        } label: {
+            label
+                .padding(.horizontal, Metric.s)
+                .padding(.vertical, Metric.s)
+                .frame(maxWidth: .infinity)
+                .background {
+                    RoundedRectangle(cornerRadius: Metric.radiusSmall, style: .continuous)
+                        .fill(Palette.primaryText.opacity(0.06))
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Brush size and shape")
+        .accessibilityValue(model.brushSizeDescription)
+        .popover(isPresented: $editing) {
+            BrushSizeEditor(model: model)
+                // Without this an iPhone turns a popover into a sheet, and a
+                // sheet for one slider is a sledgehammer.
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        if axis == .vertical {
+            VStack(spacing: 3) {
+                BrushShapeGlyph(shape: model.brushShape)
+                    .frame(width: 12, height: 12)
+                    .foregroundStyle(Palette.accent)
+                Text(model.brushSizeDescription)
+                    .font(.skNumeric(11))
+                    .foregroundStyle(Palette.primaryText)
+            }
+        } else {
+            HStack(spacing: Metric.s) {
+                BrushShapeGlyph(shape: model.brushShape)
+                    .frame(width: 13, height: 13)
+                    .foregroundStyle(Palette.accent)
+                Text("Size")
+                    .font(Typeface.font(11, .regular))
+                    .foregroundStyle(Palette.secondaryText)
+                Spacer(minLength: 0)
+                Text(model.brushSizeDescription)
+                    .font(.skNumeric(11))
+                    .foregroundStyle(Palette.primaryText)
+            }
+        }
+    }
+}
+
+/// The popover. Fixed 280 points wide, which leaves the slider about 180 — the
+/// difference between a control you can place and one you can only nudge.
+struct BrushSizeEditor: View {
     @Bindable var model: GameModel
 
     var body: some View {
-        HStack(spacing: Metric.s) {
-            stepButton("−", steps: -1)
+        VStack(alignment: .leading, spacing: Metric.l) {
+            VStack(alignment: .leading, spacing: Metric.s) {
+                HStack {
+                    Text("Size").skLabelStyle()
+                    Spacer(minLength: 0)
+                    Text(model.brushSizeDescription)
+                        .font(.skNumeric(13, weight: .medium))
+                        .foregroundStyle(Palette.primaryText)
+                }
 
-            Slider(value: $model.brushScaleExponent,
-                   in: GameModel.brushExponentRange)
-                .controlSize(.small)
-                .tint(Palette.accent)
-                .accessibilityLabel("Brush size")
-                .accessibilityValue(model.brushSizeDescription)
+                HStack(spacing: Metric.m) {
+                    stepButton("−", steps: -1)
+                    Slider(value: $model.brushScaleExponent,
+                           in: GameModel.brushExponentRange)
+                        .tint(Palette.accent)
+                        .accessibilityLabel("Brush size")
+                        .accessibilityValue(model.brushSizeDescription)
+                    stepButton("+", steps: 1)
+                }
 
-            stepButton("+", steps: 1)
+                Text("Across, for the tool in hand. The keys [ and ] step by the same amount.")
+                    .font(.skCaption)
+                    .foregroundStyle(Palette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-            Text(model.brushSizeDescription)
-                .font(.skNumeric(11))
-                .foregroundStyle(Palette.secondaryText)
-                .frame(width: 52, alignment: .trailing)
+            VStack(alignment: .leading, spacing: Metric.s) {
+                Text("Shape").skLabelStyle()
 
-            BrushShapeToggle(shape: $model.brushShape)
+                HStack(spacing: Metric.s) {
+                    ForEach(BrushShape.allCases) { option in
+                        Button {
+                            model.brushShape = option
+                        } label: {
+                            HStack(spacing: Metric.s) {
+                                BrushShapeGlyph(shape: option)
+                                    .frame(width: 13, height: 13)
+                                Text(option.title)
+                                    .font(Typeface.font(12, .regular))
+                            }
+                            .foregroundStyle(option == model.brushShape
+                                             ? Palette.accent : Palette.secondaryText)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Metric.s)
+                            .background {
+                                RoundedRectangle(cornerRadius: Metric.radiusSmall, style: .continuous)
+                                    .fill(Palette.primaryText
+                                        .opacity(option == model.brushShape ? 0.12 : 0.05))
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(option == model.brushShape
+                                                ? [.isSelected, .isButton] : .isButton)
+                    }
+                }
+
+                Text("Applies to every tool at once.")
+                    .font(.skCaption)
+                    .foregroundStyle(Palette.secondaryText)
+            }
         }
-        .accessibilityElement(children: .contain)
+        .padding(Metric.l)
+        .frame(width: 280)
     }
 
     private func stepButton(_ label: String, steps: Double) -> some View {
@@ -500,55 +621,16 @@ struct BrushSizeRow: View {
             model.nudgeBrushSize(by: steps)
         } label: {
             Text(label)
-                .font(.skNumeric(13, weight: .medium))
+                .font(.skNumeric(15, weight: .medium))
                 .foregroundStyle(Palette.primaryText)
-                .frame(width: 28, height: 26)
+                .frame(width: 32, height: 30)
                 .background {
-                    RoundedRectangle(cornerRadius: Metric.radiusSmall - 3, style: .continuous)
-                        .fill(Palette.primaryText.opacity(0.07))
+                    RoundedRectangle(cornerRadius: Metric.radiusSmall - 2, style: .continuous)
+                        .fill(Palette.primaryText.opacity(0.08))
                 }
                 .contentShape(Rectangle())
         }
         .buttonStyle(.soft)
         .accessibilityLabel(spoken)
-    }
-}
-
-/// Round or square, drawn rather than named. Two glyphs the size of a fingernail
-/// say it in every language and in less room than the word "Square" takes.
-struct BrushShapeToggle: View {
-    @Binding var shape: BrushShape
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(BrushShape.allCases) { option in
-                Button {
-                    shape = option
-                } label: {
-                    outline(for: option)
-                        .frame(width: 13, height: 13)
-                        .foregroundStyle(option == shape ? Palette.accent : Palette.secondaryText)
-                        .frame(width: 26, height: 26)
-                        .background {
-                            RoundedRectangle(cornerRadius: Metric.radiusSmall - 3, style: .continuous)
-                                .fill(Palette.primaryText.opacity(option == shape ? 0.10 : 0.0))
-                        }
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.soft)
-                .accessibilityLabel(option.title)
-                .accessibilityAddTraits(option == shape ? [.isSelected, .isButton] : .isButton)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func outline(for option: BrushShape) -> some View {
-        switch option {
-        case .round:
-            Circle().strokeBorder(lineWidth: 1.5)
-        case .square:
-            RoundedRectangle(cornerRadius: 2, style: .continuous).strokeBorder(lineWidth: 1.5)
-        }
     }
 }
