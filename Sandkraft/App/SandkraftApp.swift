@@ -34,6 +34,28 @@ struct SandkraftCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) { }
 
+        // Undo and redo were routed but never bound. `CommandRouting` has
+        // listened for both notifications since the first build and nothing has
+        // ever posted them, so ⌘Z — the one shortcut every Mac user tries
+        // without thinking — did nothing at all.
+        //
+        // These stay enabled even with an empty stack rather than reaching for
+        // `model.canUndo`: a `Commands` body is built at app scope, where no
+        // model exists yet, and `SceneCoordinator.undo()` is already a no-op
+        // when there is nothing to undo. A menu item that is always live and
+        // sometimes silent is a far smaller lie than a shortcut that is absent.
+        CommandGroup(replacing: .undoRedo) {
+            Button("Undo") {
+                NotificationCenter.default.post(name: .skUndo, object: nil)
+            }
+            .keyboardShortcut("z", modifiers: [.command])
+
+            Button("Redo") {
+                NotificationCenter.default.post(name: .skRedo, object: nil)
+            }
+            .keyboardShortcut("z", modifiers: [.command, .shift])
+        }
+
         // Settings lives in the app menu at ⌘, on every Mac ever made. Leaving it
         // behind an unlabelled gear in a floating overlay was a straight miss.
         CommandGroup(replacing: .appSettings) {
