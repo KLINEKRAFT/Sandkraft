@@ -1,0 +1,17 @@
+# Xcode / xcodebuild
+#
+# `build/` is here because the documented way to run this from a terminal passes
+# `-derivedDataPath build`, which is the only way to know where the .app landed
+# without parsing `xcodebuild -showBuildSettings`. Without this line, a terminal
+# run leaves several hundred megabytes sitting in `git status`.
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Per-user scheme management. The shared scheme in xcshareddata is the one that
+# matters and is deliberately not ignored — CI builds it by name.
+*.xcscheme_management.plist
+
+.DS_Store
