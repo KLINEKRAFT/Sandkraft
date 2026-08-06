@@ -82,6 +82,10 @@ final class SceneCoordinator: NSObject, ObservableObject {
             input.ghostRotation = mouldRotation
             input.ghostShape = model.mould.shapeIndex
             input.ghostDetail = Float(model.mould.detail)
+            // Only a *charged* mould can be judged. Before there is anything in
+            // it there is nothing to be wrong about, so the ghost stays neutral
+            // rather than accusing you of a mistake you have not made yet.
+            input.ghostWillHold = !model.mouldCharge.ready || model.mouldWillHold
         }
 
         input.props = model.gpuProps()

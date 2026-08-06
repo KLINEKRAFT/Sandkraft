@@ -76,6 +76,14 @@ struct PlayView: View {
         .onChange(of: model.selectedToolID) { _, newValue in
             showHint(Tool.tool(newValue).summary)
         }
+        // Nothing on screen said which of the nine looks you were in, which
+        // matters most for the one way of changing it that shows no interface at
+        // all — ⌘L. Reusing the hint that already exists for tools costs three
+        // lines and no pixels when it is not being changed.
+        .onChange(of: model.lookID) { _, newValue in
+            let look = Look.look(newValue)
+            showHint("\(look.name) — \(look.note)")
+        }
         .onAppear {
             model.reducedMotion = reduceMotion
             coordinator.haptics.enabled = model.hapticsEnabled

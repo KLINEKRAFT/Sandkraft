@@ -412,8 +412,17 @@ fragment float4 terrain_fragment(TerrainVertexOut in [[stage_in]],
             float2 q = float2(rel.x * ca - rel.y * sa, rel.x * sa + rel.y * ca) / R;
             float2 ms = sk_mouldShape(q, int(terrain.ghost.z + 0.5f), terrain.ghost2.x);
             float edge = ms.x * (1.0f - ms.x) * 4.0f;    // peaks on the coverage boundary
-            col += float3(0.62f, 0.86f, 1.00f) * smoothstep(0.35f, 1.0f, edge) * 0.30f;
-            col += float3(0.30f, 0.50f, 0.70f) * ms.x * 0.05f;
+
+            // The interface has always known whether the charge would survive
+            // being turned out; it just never said so until the shape had
+            // already collapsed. Red is that answer, given while it is still
+            // worth acting on.
+            float hold = terrain.ghost2.y;
+            float3 outlineTint = mix(float3(1.00f, 0.42f, 0.34f), float3(0.62f, 0.86f, 1.00f), hold);
+            float3 fillTint    = mix(float3(0.72f, 0.26f, 0.22f), float3(0.30f, 0.50f, 0.70f), hold);
+
+            col += outlineTint * smoothstep(0.35f, 1.0f, edge) * 0.30f;
+            col += fillTint * ms.x * 0.05f;
         }
     }
 

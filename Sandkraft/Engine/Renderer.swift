@@ -48,6 +48,10 @@ struct FrameInput {
     var ghostRotation: Float = 0
     var ghostShape: Int32 = 0
     var ghostDetail: Float = 8
+    /// False only when there is a charge in the mould and it is too dry to
+    /// survive being turned out. The ghost goes red rather than the player
+    /// finding out a second later.
+    var ghostWillHold = true
 
     var lanterns: [SKPointLight] = []
     var props: [SKProp] = []
@@ -354,7 +358,8 @@ final class Renderer: NSObject {
                          input.cursorRadius, cursorMode)
         t.ghost = SIMD4(input.ghostRadius, input.ghostRotation,
                         Float(input.ghostShape), input.ghostVisible ? 1 : 0)
-        t.ghost2 = SIMD4(input.ghostDetail, 0, 0, 0)
+        let willHold: Float = input.ghostWillHold ? 1 : 0
+        t.ghost2 = SIMD4(input.ghostDetail, willHold, 0, 0)
         t.ghostOrigin = SIMD4(input.ghostOrigin.x, input.ghostOrigin.y, 0, 0)
         return t
     }
