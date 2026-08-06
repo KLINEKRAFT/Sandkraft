@@ -32,7 +32,19 @@ struct SandkraftApp: App {
 /// item here is something a keyboard-first player will reach for.
 struct SandkraftCommands: Commands {
     var body: some Commands {
-        CommandGroup(replacing: .newItem) { }
+        CommandGroup(replacing: .newItem) {
+            Button("Open a Beach…") {
+                NotificationCenter.default.post(name: .skOpenBeach, object: nil)
+            }
+            .keyboardShortcut("o", modifiers: [.command])
+        }
+
+        CommandGroup(replacing: .saveItem) {
+            Button("Save This Beach…") {
+                NotificationCenter.default.post(name: .skSaveBeach, object: nil)
+            }
+            .keyboardShortcut("s", modifiers: [.command])
+        }
 
         // Undo and redo were routed but never bound. `CommandRouting` has
         // listened for both notifications since the first build and nothing has
@@ -145,6 +157,8 @@ extension Notification.Name {
     static let skAdjustBrush = Notification.Name("sk.adjustBrush")
     static let skSetBrushShape = Notification.Name("sk.setBrushShape")
     static let skTakePhoto = Notification.Name("sk.takePhoto")
+    static let skSaveBeach = Notification.Name("sk.saveBeach")
+    static let skOpenBeach = Notification.Name("sk.openBeach")
     static let skTogglePause = Notification.Name("sk.togglePause")
     static let skResetBeach = Notification.Name("sk.resetBeach")
     static let skCycleLook = Notification.Name("sk.cycleLook")

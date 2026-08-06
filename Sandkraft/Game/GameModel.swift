@@ -82,7 +82,7 @@ enum TidePhase: String, Codable, Sendable {
 
 // MARK: - Placed adornment
 
-struct PlacedProp: Identifiable, Hashable, Sendable {
+struct PlacedProp: Identifiable, Hashable, Sendable, Codable {
     let id: UUID
     var kind: AdornmentID
     var position: SIMD3<Float>
@@ -307,6 +307,71 @@ final class GameModel {
         guard photoWanted else { return false }
         photoWanted = false
         return true
+    }
+
+    // MARK: Saving a beach
+    //
+    // Same shape as the photograph: the model asks, the coordinator answers,
+    // and neither has to learn the other's vocabulary. The difference is that
+    // loading also has to come *back* through here, because restoring a beach
+    // means restoring the day and the props as well as the sand.
+
+    private(set) var saveWanted = false
+
+    /// A finished document, waiting for the interface to write it somewhere.
+    var pendingBeach: Data?
+
+    /// A document the player chose, waiting for a frame in which to upload it.
+    var pendingBeachLoad: Data?
+
+    /// One sentence, shown and then dropped.
+    var beachMessage: String?
+
+    /// Set by a menu item or a button; cleared by the view that owns the panel.
+    /// A flag rather than a closure, so Settings can ask for it without being
+    /// handed a piece of the play screen's state.
+    var openBeachWanted = false
+
+    func saveBeach() {
+        saveWanted = true
+    }
+
+    func openBeach() {
+        openBeachWanted = true
+    }
+
+    func consumeSaveRequest() -> Bool {
+        guard saveWanted else { return false }
+        saveWanted = false
+        return true
+    }
+
+    func beachHeader(resolution: Int) -> BeachHeader {
+        BeachHeader(simResolution: resolution,
+                    mode: mode,
+                    tideNumber: tideNumber,
+                    lookID: lookID,
+                    dayFraction: dayFraction,
+                    cloudCover: cloudCover,
+                    props: props,
+                    savedAt: Date())
+    }
+
+    /// Put back everything that is not sand. The field itself is the
+    /// simulation's business and has already been uploaded by the time this runs.
+    ///
+    /// Deliberately does not touch `phase` or the clocks: a saved beach is
+    /// re-entered as a sandbox to work on, not as a tide resumed halfway with a
+    /// timer that was never running while the file sat on disk.
+    func restore(from header: BeachHeader) {
+        mode = header.mode
+        tideNumber = header.tideNumber
+        lookID = header.lookID
+        dayFraction = header.dayFraction
+        cloudCover = header.cloudCover
+        props = header.props
+        phase = .idle
+        cancelStroke()
     }
 
     // MARK: Persistence

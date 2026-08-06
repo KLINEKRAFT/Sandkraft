@@ -36,6 +36,12 @@ struct CommandRouting: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .skTakePhoto)) { _ in
                 model.takePhoto()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .skSaveBeach)) { _ in
+                model.saveBeach()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .skOpenBeach)) { _ in
+                model.openBeach()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .skTogglePause)) { _ in
                 model.isPaused.toggle()
             }

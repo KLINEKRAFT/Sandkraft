@@ -328,6 +328,19 @@ struct SettingsView: View {
                     .foregroundStyle(Palette.secondaryText)
             }
 
+            Section("This beach") {
+                Button("Save this beach…") { model.saveBeach() }
+                Button("Open a beach…") { model.openBeach() }
+                Text("""
+                     A saved beach keeps the sand exactly as it stands, along \
+                     with the adornments, the look and the time of day. It \
+                     reopens as a sandbox, and only at the quality it was saved \
+                     at — the field is a different size at every tier.
+                     """)
+                    .font(.skCaption)
+                    .foregroundStyle(Palette.secondaryText)
+            }
+
             Section("Stored") {
                 LabeledContent("Campaign", value: "tide \(model.campaignProgress) unlocked")
                     .font(.skCaption)
@@ -508,6 +521,8 @@ struct ControlsReference: View {
         ]))
 
         all.append(Block(title: "The beach", rows: [
+            Row(keys: "⌘S", what: "Save this beach"),
+            Row(keys: "⌘O", what: "Open a saved beach"),
             Row(keys: "⇧⌘P", what: "Photograph the frame as it stands"),
             Row(keys: "Space", what: "Pause"),
             Row(keys: "⇧⌘R", what: "Reset the beach"),

@@ -335,7 +335,67 @@ final class SceneCoordinator: NSObject, ObservableObject {
             renderer.simulation.armStamp(stamp)
             pendingStamp = nil
         }
+
+        loadBeachIfPending(in: commandBuffer)
+        saveBeachIfRequested(in: commandBuffer)
+
         return didWork
+    }
+
+    // MARK: - Beaches on disk
+
+    private func saveBeachIfRequested(in commandBuffer: MTLCommandBuffer) {
+        guard model.consumeSaveRequest() else { return }
+
+        let resolution = renderer.simulation.resolution
+        guard let staging = renderer.simulation.snapshotForSaving(in: commandBuffer) else {
+            model.beachMessage = "The beach could not be read back from the GPU."
+            return
+        }
+
+        // The header is built now, on the main actor, rather than inside the
+        // completion handler — it reads a dozen model properties and that is not
+        // a thing to be doing from a Metal queue.
+        let header = model.beachHeader(resolution: resolution)
+        let byteCount = resolution * resolution * 16
+
+        commandBuffer.addCompletedHandler { [weak model] _ in
+            let field = Data(bytes: staging.contents(), count: byteCount)
+            let document = try? BeachDocumentFormat.encode(header: header, field: field)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let model else { return }
+                    if let document {
+                        model.pendingBeach = document
+                    } else {
+                        model.beachMessage = "The beach could not be written."
+                    }
+                }
+            }
+        }
+    }
+
+    private func loadBeachIfPending(in commandBuffer: MTLCommandBuffer) {
+        guard let data = model.pendingBeachLoad else { return }
+        model.pendingBeachLoad = nil
+
+        let resolution = renderer.simulation.resolution
+        do {
+            let (header, field) = try BeachDocumentFormat.decode(data)
+            guard header.simResolution == resolution else {
+                throw BeachDocumentFormat.Failure.wrongResolution(saved: header.simResolution,
+                                                                  current: resolution)
+            }
+            // `restore` re-checks the byte count itself. Belt and braces on a
+            // path whose input is a file the player picked off a disk.
+            guard renderer.simulation.restore(from: field, in: commandBuffer) else {
+                throw BeachDocumentFormat.Failure.damaged
+            }
+            model.restore(from: header)
+            model.beachMessage = "Beach opened."
+        } catch {
+            model.beachMessage = error.localizedDescription
+        }
     }
 
     func afterEncoding() {
