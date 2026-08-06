@@ -44,6 +44,9 @@ struct CommandRouting: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .skShowFieldNotes)) { _ in
                 sheet = .fieldNotes
             }
+            .onReceive(NotificationCenter.default.publisher(for: .skShowSettings)) { _ in
+                sheet = .settings
+            }
             .onReceive(NotificationCenter.default.publisher(for: .skUndo)) { _ in
                 coordinator.undo()
             }

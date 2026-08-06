@@ -34,6 +34,15 @@ struct SandkraftCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) { }
 
+        // Settings lives in the app menu at ⌘, on every Mac ever made. Leaving it
+        // behind an unlabelled gear in a floating overlay was a straight miss.
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") {
+                NotificationCenter.default.post(name: .skShowSettings, object: nil)
+            }
+            .keyboardShortcut(",", modifiers: [.command])
+        }
+
         CommandMenu("Tools") {
             ForEach(Tool.all) { tool in
                 Button(tool.name) {
@@ -96,6 +105,7 @@ extension Notification.Name {
     static let skResetBeach = Notification.Name("sk.resetBeach")
     static let skCycleLook = Notification.Name("sk.cycleLook")
     static let skShowFieldNotes = Notification.Name("sk.showFieldNotes")
+    static let skShowSettings = Notification.Name("sk.showSettings")
     static let skUndo = Notification.Name("sk.undo")
     static let skRedo = Notification.Name("sk.redo")
 }

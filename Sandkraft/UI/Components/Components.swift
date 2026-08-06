@@ -37,6 +37,9 @@ struct IconButton: View {
         .buttonStyle(.soft)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.35)
+        // An icon-only control with no hover text is a guessing game. VoiceOver
+        // always had the label; a pointer had nothing.
+        .help(label)
         .accessibilityLabel(label)
     }
 }

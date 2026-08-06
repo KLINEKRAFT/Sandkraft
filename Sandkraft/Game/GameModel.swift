@@ -209,6 +209,19 @@ final class GameModel {
     /// brushes.
     private(set) var referenceHeight: Float = 0
 
+    /// Where the brush was applied on the previous frame.
+    ///
+    /// Pointer events arrive faster than frames, and the world position they
+    /// resolve to only refreshes once per frame — so `strokePrevious` and
+    /// `strokeCurrent` both end up holding the same value and the brush segment
+    /// collapses to a point. At 60 fps that is a dotted line you cannot see; at
+    /// 15 fps it is four separate craters. Sweeping from the last *applied*
+    /// position instead gives a continuous stroke at any frame rate.
+    private var lastAppliedPosition: SIMD3<Float>?
+
+    /// Seconds since the current stroke began, used only for the attack ramp.
+    private var strokeElapsed: Double = 0
+
     /// Set while the Mould is being held down to fill. Released turns it out.
     private(set) var mouldFillProgress: Double = 0
     private(set) var mouldCharge: (moisture: Double, ready: Bool) = (0, false)
@@ -311,6 +324,7 @@ final class GameModel {
                 phaseElapsed += dt
                 advancePhaseIfNeeded()
             }
+            if isStroking { strokeElapsed += dt }
             updateProps(dt: Float(dt))
         }
 
@@ -500,6 +514,8 @@ final class GameModel {
         strokeStart = sample
         strokeCurrent = sample
         strokePrevious = sample
+        lastAppliedPosition = nil
+        strokeElapsed = 0
         referenceHeight = sample.world.y
 
         if tool.id == .mould {
@@ -538,6 +554,7 @@ final class GameModel {
             strokeStart = nil
             strokeCurrent = nil
             strokePrevious = nil
+            lastAppliedPosition = nil
         }
         guard isStroking else { return }
 
@@ -553,6 +570,7 @@ final class GameModel {
         strokeStart = nil
         strokeCurrent = nil
         strokePrevious = nil
+        lastAppliedPosition = nil
         mouldFillProgress = 0
         mouldCharge = (0, false)
     }
@@ -561,14 +579,26 @@ final class GameModel {
     /// happening. This is the one place tool semantics turn into solver
     /// parameters, which is exactly one more place than most games manage.
     func currentBrush() -> BrushStroke? {
-        guard isStroking, let start = strokeCurrent, let previous = strokePrevious else { return nil }
+        guard isStroking, let current = strokeCurrent else { return nil }
+
+        // Called exactly once per frame, from the encoder. The segment runs from
+        // wherever the brush last landed to wherever the cursor is now, so a fast
+        // drag paints a continuous swept line rather than a row of dots.
+        let from = lastAppliedPosition ?? current.world
+        lastAppliedPosition = current.world
 
         let t = tool
         var brush = BrushStroke()
-        brush.start = SIMD2(previous.world.x, previous.world.z)
-        brush.end = SIMD2(start.world.x, start.world.z)
+        brush.start = SIMD2(from.x, from.z)
+        brush.end = SIMD2(current.world.x, current.world.z)
         brush.radius = Float(t.radius * brushScale)
-        brush.strength = Float(t.strength)
+
+        // Attack ramp. At full rate from the first instant, a tap lands like a
+        // punch and a short drag gouges a trench — the tool has no light touch at
+        // all. Starting at 45% and reaching full over 150 ms gives one, without
+        // making a deliberate tap useless the way a ramp from zero would.
+        let attack = 0.45 + 0.55 * min(strokeElapsed / 0.15, 1)
+        brush.strength = Float(t.strength * attack)
 
         switch t.id {
         case .mould:

@@ -87,11 +87,13 @@ final class SceneCoordinator: NSObject, ObservableObject {
         input.lanterns = model.gpuLanterns()
         renderer.input = input
 
-        // Follow the work with the camera. The pivot, not the eye — the view
-        // direction is the player's to choose and we never take it away.
-        if cursorValid, model.isStroking {
-            renderer.camera.focus(on: cursorWorld)
-        }
+        // The camera follows your work — but only *between* strokes.
+        //
+        // Moving the pivot during a drag is a feedback loop: the pivot slides
+        // toward the cursor, which shifts the view, which moves where the ray
+        // through the cursor lands, which the pivot then chases. You end up
+        // digging at a target that is running away from you. The pivot is
+        // updated once, when the stroke ends.
         renderer.camera.update(dt: Float(dt)) { [weak self] p in
             self?.approximateGroundHeight(at: p) ?? 0
         }
@@ -215,6 +217,10 @@ final class SceneCoordinator: NSObject, ObservableObject {
         pointerActive = false
         model.endStroke()
         audio.endTool()
+        // Now that nothing is being dragged, bring the pivot to where the work
+        // just happened. This is the whole "no pan gesture needed" idea, and it
+        // only works if it happens between strokes rather than during them.
+        if cursorValid { renderer.camera.focus(on: cursorWorld) }
     }
 
     func pointerCancelled() {
