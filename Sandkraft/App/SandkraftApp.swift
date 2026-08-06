@@ -99,6 +99,11 @@ struct SandkraftCommands: Commands {
         }
 
         CommandMenu("Beach") {
+            Button("Take a photograph…") {
+                NotificationCenter.default.post(name: .skTakePhoto, object: nil)
+            }
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+            Divider()
             Button("Pause") {
                 NotificationCenter.default.post(name: .skTogglePause, object: nil)
             }
@@ -139,6 +144,7 @@ extension Notification.Name {
     static let skSelectTool = Notification.Name("sk.selectTool")
     static let skAdjustBrush = Notification.Name("sk.adjustBrush")
     static let skSetBrushShape = Notification.Name("sk.setBrushShape")
+    static let skTakePhoto = Notification.Name("sk.takePhoto")
     static let skTogglePause = Notification.Name("sk.togglePause")
     static let skResetBeach = Notification.Name("sk.resetBeach")
     static let skCycleLook = Notification.Name("sk.cycleLook")

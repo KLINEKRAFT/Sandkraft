@@ -286,6 +286,29 @@ final class GameModel {
     var showAdvancedReadouts = false
     var qualityTier: QualityTier = .medium
 
+    // MARK: Photographs
+    //
+    // The model asks; the coordinator, which is the only thing that knows about
+    // a GPU, answers. Neither has to learn the other's vocabulary for it.
+
+    private(set) var photoWanted = false
+
+    /// The finished PNG, waiting for the interface to offer it somewhere. The
+    /// interface clears it.
+    var pendingPhoto: Data?
+
+    func takePhoto() {
+        photoWanted = true
+    }
+
+    /// Called once per frame by the coordinator. True exactly once per request,
+    /// so a held button cannot queue up forty photographs.
+    func consumePhotoRequest() -> Bool {
+        guard photoWanted else { return false }
+        photoWanted = false
+        return true
+    }
+
     // MARK: Persistence
     //
     // Gathering everything worth keeping into one `Equatable` value is what lets

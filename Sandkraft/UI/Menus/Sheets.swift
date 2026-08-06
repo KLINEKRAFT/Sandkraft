@@ -508,6 +508,7 @@ struct ControlsReference: View {
         ]))
 
         all.append(Block(title: "The beach", rows: [
+            Row(keys: "⇧⌘P", what: "Photograph the frame as it stands"),
             Row(keys: "Space", what: "Pause"),
             Row(keys: "⇧⌘R", what: "Reset the beach"),
             Row(keys: "⌘L", what: "Next look"),

@@ -48,6 +48,10 @@ struct FrameInput {
     var ghostRotation: Float = 0
     var ghostShape: Int32 = 0
     var ghostDetail: Float = 8
+    /// False only when there is a charge in the mould and it is too dry to
+    /// survive being turned out. The ghost goes red rather than the player
+    /// finding out a second later.
+    var ghostWillHold = true
 
     var lanterns: [SKPointLight] = []
     var props: [SKProp] = []
@@ -354,7 +358,8 @@ final class Renderer: NSObject {
                          input.cursorRadius, cursorMode)
         t.ghost = SIMD4(input.ghostRadius, input.ghostRotation,
                         Float(input.ghostShape), input.ghostVisible ? 1 : 0)
-        t.ghost2 = SIMD4(input.ghostDetail, 0, 0, 0)
+        let willHold: Float = input.ghostWillHold ? 1 : 0
+        t.ghost2 = SIMD4(input.ghostDetail, willHold, 0, 0)
         t.ghostOrigin = SIMD4(input.ghostOrigin.x, input.ghostOrigin.y, 0, 0)
         return t
     }
@@ -671,8 +676,58 @@ final class Renderer: NSObject {
             }
         }
 
+        // The photograph. Taken here, after the composite and before the
+        // present, so what lands on disk is byte-for-byte what lands on screen.
+        // Consumed on read: one request is one picture, and a request that
+        // arrives mid-frame is simply served by the next one.
+        if let handler = captureRequest {
+            captureRequest = nil
+            capture(drawable.texture, in: commandBuffer, then: handler)
+        }
+
         commandBuffer.present(drawable)
         commandBuffer.commit()
+    }
+
+    // MARK: - Capture
+
+    /// Set to have the next presented frame read back and encoded as PNG. Called
+    /// on the main queue with nil if the read back could not be set up.
+    var captureRequest: ((Data?) -> Void)?
+
+    private func capture(_ texture: MTLTexture,
+                         in commandBuffer: MTLCommandBuffer,
+                         then handler: @escaping (Data?) -> Void) {
+        let width = texture.width
+        let height = texture.height
+        let bytesPerRow = width * 4
+
+        // A shared *buffer* rather than a shared texture: buffer storage modes
+        // behave the same everywhere this ships, and texture ones do not.
+        guard width > 0, height > 0,
+              let staging = context.makeBuffer(length: bytesPerRow * height,
+                                               label: "frame.capture"),
+              let blit = commandBuffer.makeBlitCommandEncoder() else {
+            DispatchQueue.main.async { handler(nil) }
+            return
+        }
+
+        blit.label = "frame.download"
+        blit.copy(from: texture, sourceSlice: 0, sourceLevel: 0,
+                  sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+                  sourceSize: MTLSize(width: width, height: height, depth: 1),
+                  to: staging, destinationOffset: 0,
+                  destinationBytesPerRow: bytesPerRow,
+                  destinationBytesPerImage: bytesPerRow * height)
+        blit.endEncoding()
+
+        commandBuffer.addCompletedHandler { _ in
+            // PNG encoding is not fast and this handler runs on a Metal queue,
+            // so it happens here rather than being hopped to the main thread
+            // first. Only the finished bytes cross over.
+            let png = FrameCapture.png(from: staging, width: width, height: height)
+            DispatchQueue.main.async { handler(png) }
+        }
     }
 
     // MARK: - Helpers

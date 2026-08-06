@@ -139,14 +139,18 @@ settings screen says so rather than silently discarding the player's castle.
 
 Written down rather than left to be discovered:
 
-- **Saving is plumbed but not wired to the interface.** `SandSimulation` can
-  snapshot the field to a buffer and restore it, and `PlacedProp` is `Codable`,
-  but there is no save UI and no document type yet.
+- **Saving the beach is plumbed but not wired to the interface.**
+  `SandSimulation.snapshotForSaving` and `.restore` both work, but there is no
+  document type and no save UI. Note that `PlacedProp` is *not* `Codable` — an
+  earlier version of this list said it was, and it is not; conforming it is part
+  of the work, not a thing already done.
 - **Props read one ground height per frame**, sampled near the cursor, so an
   adornment far from where you are working leans late. A per-prop height query
   needs either a batched pick kernel or a small CPU mirror of the field.
-- **The mould ghost does not preview moisture failure.** The interface knows
-  whether the charge will hold (`GameModel.mouldWillHold`); the ghost does not
-  yet turn red when it will not.
 - **Rising mode has no end condition** beyond the water eventually covering
   everything.
+- **`sk_bedrock` is rebuilt per pixel.** `terrain_fragment` central-differences
+  it four times to reconstruct the macro normal, and each call is nine value
+  noise evaluations plus two sines — roughly 36 noise lookups per pixel for
+  terrain that never changes. The water fragment pays it five times. Baking it
+  into a lookup texture is the largest single frame-time win left.

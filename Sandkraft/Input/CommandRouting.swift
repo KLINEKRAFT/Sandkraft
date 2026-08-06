@@ -33,6 +33,9 @@ struct CommandRouting: ViewModifier {
                       let shape = BrushShape(rawValue: raw) else { return }
                 model.brushShape = shape
             }
+            .onReceive(NotificationCenter.default.publisher(for: .skTakePhoto)) { _ in
+                model.takePhoto()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .skTogglePause)) { _ in
                 model.isPaused.toggle()
             }
