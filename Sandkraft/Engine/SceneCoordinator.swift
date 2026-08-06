@@ -73,6 +73,7 @@ final class SceneCoordinator: NSObject, ObservableObject {
         input.cursorWorld = SIMD2(cursorWorld.x, cursorWorld.z)
         input.cursorRadius = Float(model.tool.radius * model.brushScale)
         input.cursorVisible = cursorValid && model.phase != .briefing && model.phase != .reckoning
+        input.cursorSquare = model.brushShape == .square
 
         if model.selectedToolID == .mould, cursorValid {
             input.ghostVisible = input.cursorVisible

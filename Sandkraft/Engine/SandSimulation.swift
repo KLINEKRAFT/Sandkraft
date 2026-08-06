@@ -39,6 +39,8 @@ struct BrushStroke {
     /// Meaning depends on the mode: the reference height for Carve/Level/Wall,
     /// the pail gate for Pour/Drip.
     var parameter: Float = 1
+    /// Round or square footprint. Rides on `stamp3.w`, which was spare.
+    var shape: BrushShape = .round
 }
 
 struct MouldStamp {
@@ -250,6 +252,12 @@ final class SandSimulation {
             u.stamp2 = SIMD4<Float>(8, 0, 1, 0)
             u.stamp3 = SIMD4<Float>(0, 0, 0.8, 0)
         }
+
+        // Set last and in one place: the brush footprint is a property of the
+        // stroke, not of the mould, and both branches above would otherwise have
+        // to remember to carry it.
+        u.stamp3.w = stroke.shape.rawFlag
+
         return u
     }
 

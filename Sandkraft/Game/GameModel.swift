@@ -156,6 +156,57 @@ final class GameModel {
     /// too many.
     var brushScale: Double = 1.0
 
+    /// Round or square, for every stroke tool at once. See `BrushShape`.
+    var brushShape: BrushShape = .round
+
+    // MARK: Sizing
+    //
+    // Size is stored as a multiplier but *adjusted* in log space. Over a 4.4×
+    // range a linear slider crams every small brush into the first fifth of its
+    // travel and then spends the rest of it on sizes nobody wants — which is
+    // most of why the control felt clunky. In log space equal travel is equal
+    // ratio, which is how size reads to a hand.
+
+    /// log₂ bounds of `brushScale`: 0.45× to 2.00×.
+    static let brushExponentRange: ClosedRange<Double> = -1.152...1.0
+
+    /// One press of `[`, `]`, − or +. About 15%, the same detent the menu bar
+    /// has always used.
+    static let brushStepExponent: Double = 0.2016
+
+    /// The slider binds to this, not to `brushScale`.
+    ///
+    /// The floor inside `log2` is not defensive habit: this is a `Binding`
+    /// source, and `log2(0)` is −infinity, which would reach a `Slider` as a NaN
+    /// position and take the whole control with it.
+    var brushScaleExponent: Double {
+        get { log2(max(brushScale, 0.001)) }
+        set {
+            let lo = Self.brushExponentRange.lowerBound
+            let hi = Self.brushExponentRange.upperBound
+            brushScale = exp2(min(max(newValue, lo), hi))
+        }
+    }
+
+    /// Step the brush by whole detents. Positive grows.
+    func nudgeBrushSize(by steps: Double) {
+        brushScaleExponent = brushScaleExponent + steps * Self.brushStepExponent
+    }
+
+    /// The working radius of whatever is currently selected, in metres. Moulds
+    /// scale off the same multiplier, which is why the size control has to be
+    /// visible while one is chosen.
+    var brushRadius: Double {
+        let base: Double = selectedToolID == .mould ? mould.radius : tool.radius
+        return base * brushScale
+    }
+
+    /// Across, in metres — the number you can actually see on the sand, rather
+    /// than a multiplier of a constant you cannot.
+    var brushSizeDescription: String {
+        String(format: "%.2f m", brushRadius * 2)
+    }
+
     var tool: Tool { Tool.tool(selectedToolID) }
     var mould: Mould { Mould.mould(selectedMouldID) }
     var adornment: Adornment { Adornment.adornment(selectedAdornmentID) }
@@ -592,6 +643,7 @@ final class GameModel {
         brush.start = SIMD2(from.x, from.z)
         brush.end = SIMD2(current.world.x, current.world.z)
         brush.radius = Float(t.radius * brushScale)
+        brush.shape = brushShape
 
         // Attack ramp. At full rate from the first instant, a tap lands like a
         // punch and a short drag gouges a trench — the tool has no light touch at

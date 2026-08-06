@@ -25,8 +25,13 @@ struct CommandRouting: ViewModifier {
                 model.selectedToolID = id
             }
             .onReceive(NotificationCenter.default.publisher(for: .skAdjustBrush)) { note in
-                guard let factor = note.object as? Double else { return }
-                model.brushScale = min(max(model.brushScale * factor, 0.45), 2.0)
+                guard let steps = note.object as? Double else { return }
+                model.nudgeBrushSize(by: steps)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .skSetBrushShape)) { note in
+                guard let raw = note.object as? String,
+                      let shape = BrushShape(rawValue: raw) else { return }
+                model.brushShape = shape
             }
             .onReceive(NotificationCenter.default.publisher(for: .skTogglePause)) { _ in
                 model.isPaused.toggle()
