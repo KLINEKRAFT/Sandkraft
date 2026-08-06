@@ -140,7 +140,7 @@ struct MoistureReadout: View {
                 Text(valid ? Palette.moistureLabel(moisture) : "—")
                     .font(.skLabel)
                 Text(valid ? "packed \(Int(packing * 100))%" : "no sand under cursor")
-                    .font(.system(size: 10))
+                    .font(Typeface.font(10, .regular))
                     .foregroundStyle(Palette.secondaryText)
             }
         }
@@ -191,7 +191,7 @@ struct TideClock: View {
                     .font(.skLabel)
                     .foregroundStyle(urgent ? tint : Palette.primaryText)
                 Text(detail)
-                    .font(.system(size: 10))
+                    .font(Typeface.font(10, .regular))
                     .foregroundStyle(Palette.secondaryText)
             }
         }
@@ -229,7 +229,7 @@ struct ObjectiveRow: View {
 
             VStack(alignment: .leading, spacing: compact ? 2 : 4) {
                 Text(text)
-                    .font(compact ? .system(size: 12) : .system(.subheadline))
+                    .font(Typeface.font(compact ? 12 : 14, .regular))
                     .foregroundStyle(met ? Palette.secondaryText : Palette.primaryText)
                     .strikethrough(met, color: Palette.secondaryText)
                 if !met && !compact {
@@ -260,7 +260,7 @@ struct ToolChip: View {
             VStack(spacing: 3) {
                 GlyphView(glyph: tool.glyph, size: 24, weight: selected ? 1.9 : 1.6)
                 Text(tool.name)
-                    .font(.system(size: 10, weight: selected ? .semibold : .regular))
+                    .font(Typeface.font(10, selected ? .semibold : .regular))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -273,7 +273,7 @@ struct ToolChip: View {
             .overlay(alignment: .topTrailing) {
                 if showsShortcut {
                     Text(String(tool.shortcut))
-                        .font(.system(size: 9, weight: .medium))
+                        .font(Typeface.font(9, .medium))
                         .foregroundStyle(selected ? Color.black.opacity(0.45) : Palette.secondaryText)
                         .padding(3)
                 }
@@ -304,12 +304,12 @@ struct GlyphChip: View {
                 GlyphView(glyph: glyph, size: 30, weight: 1.5)
                     .frame(height: 34)
                 Text(title)
-                    .font(.system(size: 11, weight: selected ? .semibold : .regular))
+                    .font(Typeface.font(11, selected ? .semibold : .regular))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 9))
+                        .font(Typeface.font(9, .regular))
                         .foregroundStyle(Palette.secondaryText)
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
@@ -347,7 +347,7 @@ struct PanelHeading: View {
                 .foregroundStyle(Palette.secondaryText)
             if let caption {
                 Text(caption)
-                    .font(.system(size: 11))
+                    .font(Typeface.font(11, .regular))
                     .foregroundStyle(Palette.secondaryText.opacity(0.8))
             }
         }
@@ -362,7 +362,7 @@ struct HintBubble: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.system(size: 12))
+            .font(Typeface.font(12, .regular))
             .foregroundStyle(Palette.primaryText)
             .padding(.horizontal, Metric.m)
             .padding(.vertical, Metric.s)

@@ -162,9 +162,14 @@ extension Font {
 extension Text {
     /// A small uppercase label with the tracking that makes letterspaced mono
     /// read as a label rather than as shouting.
-    func skLabelStyle(_ tint: Color = Palette.secondaryText) -> some View {
+    func skLabelStyle(_ tint: Color = Palette.secondaryText,
+                      tracking: CGFloat = 1.2) -> some View {
+        // Tracking is taken as a parameter rather than left to the caller to
+        // chain on afterwards: this returns `some View`, and applying a text
+        // modifier to an opaque view result is a needless bet when the value can
+        // simply be applied to the Text while we still have one.
         self.font(.skLabel)
-            .tracking(1.2)
+            .tracking(tracking)
             .textCase(.uppercase)
             .foregroundStyle(tint)
     }
