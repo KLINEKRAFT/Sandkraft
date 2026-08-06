@@ -44,25 +44,25 @@ enum ToolMouldID: String, CaseIterable, Identifiable, Codable, Sendable {
 
 extension Mould {
     static let all: [Mould] = [
-        Mould(id: .turret,    shapeIndex: 0, radius: 0.95, height: 1.55, detail: 9, minimumMoisture: 0.55,
+        Mould(id: .turret,    shapeIndex: 0, name: "Round turret", radius: 0.95, height: 1.55, detail: 9, minimumMoisture: 0.55,
               note: "Crenellated. The one everybody starts with."),
-        Mould(id: .keep,      shapeIndex: 1, radius: 1.05, height: 1.35, detail: 0, minimumMoisture: 0.55,
+        Mould(id: .keep,      shapeIndex: 1, name: "Square keep", radius: 1.05, height: 1.35, detail: 0, minimumMoisture: 0.55,
               note: "Square, with corner towers. Sits well on a levelled pad."),
-        Mould(id: .gatehouse, shapeIndex: 2, radius: 1.30, height: 1.25, detail: 0, minimumMoisture: 0.58,
+        Mould(id: .gatehouse, shapeIndex: 2, name: "Gatehouse", radius: 1.30, height: 1.25, detail: 0, minimumMoisture: 0.58,
               note: "Two towers and an arch. Line the arch up with a carved road."),
-        Mould(id: .starFort,  shapeIndex: 3, radius: 1.35, height: 0.95, detail: 0, minimumMoisture: 0.55,
+        Mould(id: .starFort,  shapeIndex: 3, name: "Star fort", radius: 1.35, height: 0.95, detail: 0, minimumMoisture: 0.55,
               note: "Low, wide, and very hard for water to get a grip on."),
-        Mould(id: .ziggurat,  shapeIndex: 4, radius: 1.25, height: 1.25, detail: 0, minimumMoisture: 0.50,
+        Mould(id: .ziggurat,  shapeIndex: 4, name: "Ziggurat", radius: 1.25, height: 1.25, detail: 0, minimumMoisture: 0.50,
               note: "Stepped. Each step is a place a wave has to stop and think."),
-        Mould(id: .spire,     shapeIndex: 5, radius: 0.70, height: 2.10, detail: 0, minimumMoisture: 0.68,
+        Mould(id: .spire,     shapeIndex: 5, name: "Spire", radius: 0.70, height: 2.10, detail: 0, minimumMoisture: 0.68,
               note: "Tall and thin. Needs the wettest sand you have."),
-        Mould(id: .scallop,   shapeIndex: 6, radius: 0.95, height: 0.50, detail: 0, minimumMoisture: 0.42,
+        Mould(id: .scallop,   shapeIndex: 6, name: "Scallop", radius: 0.95, height: 0.50, detail: 0, minimumMoisture: 0.42,
               note: "A ribbed shell. Flat-topped, so the ribs read."),
-        Mould(id: .fish,      shapeIndex: 7, radius: 1.20, height: 0.46, detail: 0, minimumMoisture: 0.42,
+        Mould(id: .fish,      shapeIndex: 7, name: "Fish", radius: 1.20, height: 0.46, detail: 0, minimumMoisture: 0.42,
               note: "Decorative. Turns out best on packed ground."),
-        Mould(id: .crab,      shapeIndex: 8, radius: 1.20, height: 0.42, detail: 0, minimumMoisture: 0.45,
+        Mould(id: .crab,      shapeIndex: 8, name: "Crab", radius: 1.20, height: 0.42, detail: 0, minimumMoisture: 0.45,
               note: "Claws and legs. Fragile — keep it off the waterline."),
-        Mould(id: .starfish,  shapeIndex: 9, radius: 1.20, height: 0.34, detail: 0, minimumMoisture: 0.38,
+        Mould(id: .starfish,  shapeIndex: 9, name: "Starfish", radius: 1.20, height: 0.34, detail: 0, minimumMoisture: 0.38,
               note: "Five arms. The most forgiving shape in the bag.")
     ]
 
