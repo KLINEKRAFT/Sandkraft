@@ -30,7 +30,15 @@ final class AppEngine {
         guard case .loading = state else { return }
         do {
             let context = try MetalContext()
-            let tier = context.recommendedTier
+
+            // A tier the player chose outranks the one we would guess. That
+            // ordering is the entire point: guessing is what handed this machine
+            // Maximum in the first place, and having to correct the guess on
+            // every single launch is worse than the guess was.
+            let stored = Preferences.load()
+            model.apply(stored)
+
+            let tier = stored.qualityTier ?? context.recommendedTier
             model.qualityTier = tier
             let renderer = try Renderer(context: context, tier: tier)
             let coordinator = SceneCoordinator(renderer: renderer, model: model)
@@ -89,6 +97,13 @@ struct RootView: View {
         .environment(\.skReturnToTitle, { withAnimation(.skSlow) { showingTitle = true } })
         .onChange(of: engine.model.qualityTier) { _, newValue in
             engine.applyQuality(newValue)
+        }
+        // The one save site. Reading `preferences` here observes every property
+        // it gathers, so any of them changing lands the whole set in
+        // UserDefaults — which coalesces its own writes, so a slider being
+        // dragged does not mean a slider being written sixty times a second.
+        .onChange(of: engine.model.preferences) { _, latest in
+            Preferences.save(latest)
         }
         #if os(macOS)
         .frame(minWidth: 900, minHeight: 620)

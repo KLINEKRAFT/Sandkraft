@@ -286,6 +286,48 @@ final class GameModel {
     var showAdvancedReadouts = false
     var qualityTier: QualityTier = .medium
 
+    // MARK: Persistence
+    //
+    // Gathering everything worth keeping into one `Equatable` value is what lets
+    // the save be a single `onChange` in `RootView` rather than an observer on
+    // each of a dozen properties. Reading this inside a view body registers a
+    // dependency on every property it touches, so any one of them changing is
+    // enough to fire the write.
+
+    var preferences: StoredPreferences {
+        StoredPreferences(qualityTier: qualityTier,
+                          lookID: lookID,
+                          brushScale: brushScale,
+                          brushShape: brushShape,
+                          hapticsEnabled: hapticsEnabled,
+                          soundEnabled: soundEnabled,
+                          musicEnabled: musicEnabled,
+                          reducedMotion: reducedMotion,
+                          showAdvancedReadouts: showAdvancedReadouts,
+                          daySpeed: daySpeed,
+                          cloudCover: cloudCover,
+                          campaignProgress: campaignProgress)
+    }
+
+    /// Restore what was saved.
+    ///
+    /// `qualityTier` is pointedly not applied here: `AppEngine.boot` needs it
+    /// *before* there is a renderer to reconfigure, and setting it here as well
+    /// would rebuild the simulation a second time on every launch.
+    func apply(_ p: StoredPreferences) {
+        lookID = p.lookID
+        brushScale = p.brushScale
+        brushShape = p.brushShape
+        hapticsEnabled = p.hapticsEnabled
+        soundEnabled = p.soundEnabled
+        musicEnabled = p.musicEnabled
+        reducedMotion = p.reducedMotion
+        showAdvancedReadouts = p.showAdvancedReadouts
+        daySpeed = p.daySpeed
+        cloudCover = p.cloudCover
+        campaignProgress = p.campaignProgress
+    }
+
     // MARK: Events out
     //
     // The coordinator drains these each frame. An event queue rather than direct

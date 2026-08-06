@@ -257,6 +257,7 @@ struct LookSwatch: View {
 
 struct SettingsView: View {
     @Bindable var model: GameModel
+    @State private var confirmingReset = false
 
     var body: some View {
         Form {
@@ -327,10 +328,43 @@ struct SettingsView: View {
                     .foregroundStyle(Palette.secondaryText)
             }
 
+            Section("Stored") {
+                LabeledContent("Campaign", value: "tide \(model.campaignProgress) unlocked")
+                    .font(.skCaption)
+                Text("""
+                     Everything on this screen is remembered between launches, \
+                     along with your brush and which tides you have reached.
+                     """)
+                    .font(.skCaption)
+                    .foregroundStyle(Palette.secondaryText)
+
+                Button("Reset settings and progress", role: .destructive) {
+                    confirmingReset = true
+                }
+            }
+
             Section("About") {
                 LabeledContent("Simulation", value: "\(model.qualityTier.simResolution)² heightfield")
                 LabeledContent("Solver", value: "\(model.qualityTier.substeps) substeps per frame")
             }
+        }
+        .confirmationDialog("Reset settings and progress?",
+                            isPresented: $confirmingReset,
+                            titleVisibility: .visible) {
+            Button("Reset", role: .destructive) {
+                Preferences.reset()
+                // The model has to be put back too. It is the source the save
+                // reads from, so clearing only the store would see every old
+                // value written straight back on the next change.
+                model.apply(StoredPreferences())
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("""
+                 Every setting goes back to its default and the campaign locks \
+                 back to the first tide. Quality is left as it is, because \
+                 changing it lays down a fresh beach.
+                 """)
         }
         #if os(macOS)
         .formStyle(.grouped)
