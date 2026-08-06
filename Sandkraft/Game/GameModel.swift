@@ -188,6 +188,11 @@ final class GameModel {
     private(set) var canUndo = false
     private(set) var canRedo = false
 
+    /// Smoothed frame time in milliseconds, straight off the renderer. Shown
+    /// under Advanced readouts, because "it feels slow" and "it is drawing at
+    /// 14 fps" are very different bug reports and only one of them is actionable.
+    private(set) var frameMilliseconds: Double = 0
+
     // MARK: Adornments
 
     private(set) var props: [PlacedProp] = []
@@ -380,6 +385,10 @@ final class GameModel {
         hoverValid = pick.point.w > 0.5
         hoverMoisture = Double(pick.sand.x)
         hoverPacking = Double(pick.sand.y)
+    }
+
+    func ingest(frameDuration seconds: Double) {
+        frameMilliseconds = seconds * 1000
     }
 
     func ingest(canUndo u: Bool, canRedo r: Bool) {
