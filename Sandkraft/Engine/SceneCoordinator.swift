@@ -88,6 +88,16 @@ final class SceneCoordinator: NSObject, ObservableObject {
             input.ghostWillHold = !model.mouldCharge.ready || model.mouldWillHold
         }
 
+        if model.consumePhotoRequest() {
+            renderer.captureRequest = { [weak model] data in
+                // Already hopped to the main queue by the renderer; this states
+                // that to the compiler so the model can be touched at all.
+                MainActor.assumeIsolated {
+                    model?.pendingPhoto = data
+                }
+            }
+        }
+
         input.props = model.gpuProps()
         input.lanterns = model.gpuLanterns()
         renderer.input = input

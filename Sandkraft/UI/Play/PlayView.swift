@@ -16,6 +16,30 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// A PNG on its way to wherever the player wants to put it.
+///
+/// `fileExporter` wants a `FileDocument`, and the bytes already exist, so this
+/// is the thinnest possible wrapper around them. Reading is implemented only
+/// because the protocol insists — nothing in this app opens a photograph.
+struct PhotoDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.png] }
+
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
 
 struct PlayView: View {
     @Bindable var model: GameModel
@@ -32,6 +56,8 @@ struct PlayView: View {
     @State private var showObjectives = true
     @State private var hint: String?
     @State private var hintTask: Task<Void, Never>?
+    @State private var photo: PhotoDocument?
+    @State private var exportingPhoto = false
 
     private var isCompact: Bool {
         #if os(macOS)
@@ -87,6 +113,26 @@ struct PlayView: View {
         .onAppear {
             model.reducedMotion = reduceMotion
             coordinator.haptics.enabled = model.hapticsEnabled
+        }
+        // Watched as a Bool rather than as the `Data` itself: `onChange` compares
+        // old against new on every body evaluation, and that would mean an
+        // equality check over several megabytes of PNG for every frame the
+        // interface happens to update on.
+        .onChange(of: model.pendingPhoto != nil) { _, arrived in
+            guard arrived, let data = model.pendingPhoto else { return }
+            photo = PhotoDocument(data: data)
+            exportingPhoto = true
+            model.pendingPhoto = nil
+        }
+        .fileExporter(isPresented: $exportingPhoto,
+                      document: photo,
+                      contentType: .png,
+                      defaultFilename: FrameCapture.suggestedFilename()) { result in
+            photo = nil
+            switch result {
+            case .success: showHint("Photograph saved.")
+            case .failure: showHint("The photograph could not be saved.")
+            }
         }
         .onChange(of: reduceMotion) { _, newValue in model.reducedMotion = newValue }
         .onChange(of: model.hapticsEnabled) { _, newValue in coordinator.haptics.enabled = newValue }
@@ -300,6 +346,7 @@ struct QuickControls: View {
             IconButton(glyph: .redo, label: "Redo", enabled: model.canRedo) {
                 coordinator.redo()
             }
+            IconButton(glyph: .camera, label: "Photograph") { model.takePhoto() }
             IconButton(glyph: .layers, label: "Look") { sheet = .look }
             IconButton(glyph: model.isPaused ? .play : .pause,
                        label: model.isPaused ? "Resume" : "Pause") {
