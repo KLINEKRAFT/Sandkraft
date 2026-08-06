@@ -149,14 +149,20 @@ final class SandSimulation {
     // MARK: - Init
 
     init(context: MetalContext, tier: QualityTier) throws {
+        // Bound to a local before anything else. `makeField` below is a nested
+        // function, and a nested function that touches `self.resolution` counts as
+        // capturing self — which Swift will not allow before every stored property
+        // has a value. Reading the local instead keeps it capture-free.
+        let res = tier.simResolution
+
         self.context = context
-        self.resolution = tier.simResolution
+        self.resolution = res
         self.undoDepth = tier.undoDepth
 
         let field: MTLTextureUsage = [.shaderRead, .shaderWrite]
 
         func makeField(_ label: String) throws -> MTLTexture {
-            guard let t = context.makeTexture(width: resolution, height: resolution,
+            guard let t = context.makeTexture(width: res, height: res,
                                               format: .rgba32Float, usage: field, label: label) else {
                 throw MetalSetupError.noDevice
             }
@@ -167,12 +173,12 @@ final class SandSimulation {
         sandBack  = try makeField("sand.back")
         pristine  = try makeField("sand.pristine")
 
-        guard let ao = context.makeTexture(width: max(resolution / 2, 128),
-                                           height: max(resolution / 2, 128),
+        guard let ao = context.makeTexture(width: max(res / 2, 128),
+                                           height: max(res / 2, 128),
                                            format: .r8Unorm, usage: field, label: "sand.ao"),
-              let dep = context.makeTexture(width: resolution, height: resolution,
+              let dep = context.makeTexture(width: res, height: res,
                                             format: .rg32Float, usage: field, label: "sand.deposit"),
-              let acc = context.makeBuffer(length: resolution * resolution * 2 * MemoryLayout<UInt32>.stride,
+              let acc = context.makeBuffer(length: res * res * 2 * MemoryLayout<UInt32>.stride,
                                            storage: .storageModePrivate, label: "sand.depositAccumulator")
         else { throw MetalSetupError.noDevice }
 
@@ -180,8 +186,8 @@ final class SandSimulation {
         deposit = dep
         depositAccumulator = acc
 
-        let tgWide = (resolution + Self.metricThreadgroup.width - 1) / Self.metricThreadgroup.width
-        let tgHigh = (resolution + Self.metricThreadgroup.height - 1) / Self.metricThreadgroup.height
+        let tgWide = (res + Self.metricThreadgroup.width - 1) / Self.metricThreadgroup.width
+        let tgHigh = (res + Self.metricThreadgroup.height - 1) / Self.metricThreadgroup.height
         partialCount = tgWide * tgHigh
 
         guard let partials = context.makeBuffer(length: partialCount * Self.metricSlots * MemoryLayout<Float>.stride,
@@ -205,7 +211,7 @@ final class SandSimulation {
         pDepositClear   = try context.computePipeline("deposit_clear")
 
         for i in 0..<undoDepth {
-            guard let t = context.makeTexture(width: resolution, height: resolution,
+            guard let t = context.makeTexture(width: res, height: res,
                                               format: .rgba32Float,
                                               usage: [.shaderRead, .shaderWrite],
                                               label: "sand.undo.\(i)") else {
