@@ -42,3 +42,6 @@ done
 echo
 echo "Wrote 7 files to $DEST"
 echo "Contents.json already points at them — build and the icon is in."
+echo
+echo "Before submitting to the App Store, read docs/ARTWORK.md: iOS rejects an"
+echo "alpha channel and masks the corners itself, so it needs a square master."
