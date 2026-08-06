@@ -260,8 +260,8 @@ struct ObjectiveStack: View {
                         .contentTransition(.numericText())
                 }
                 Text(model.tide.epigraph)
-                    .font(.skSerif(13))
-                    .italic()
+                    .font(.skProse(12))
+                    .lineSpacing(skProseSpacing - 2)
                     .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }

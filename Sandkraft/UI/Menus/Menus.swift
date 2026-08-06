@@ -24,18 +24,22 @@ struct TitleView: View {
             VStack(spacing: 0) {
                 Spacer(minLength: Metric.xxl)
 
-                VStack(spacing: Metric.s) {
+                VStack(spacing: Metric.m) {
                     Text("SANDKRAFT")
-                        .font(.system(size: 44, weight: .light, design: .serif))
-                        .tracking(10)
+                        .font(.skDisplay(38, weight: .ultraLight))
+                        .tracking(16)
+                        // Tracking adds space after the *last* letter too, so a
+                        // centred word sits visibly left of centre. Half the
+                        // tracking back on the leading edge squares it up.
+                        .padding(.leading, 16)
                         .skLegible()
+
                     Text("A sandcastle simulator")
-                        .font(.skSerif(15))
-                        .italic()
-                        .foregroundStyle(Palette.secondaryText)
+                        .skLabelStyle(Palette.secondaryText)
+                        .tracking(3)
                         .skLegible()
                 }
-                .padding(.bottom, Metric.xxl)
+                .padding(.bottom, Metric.xxxl)
 
                 VStack(spacing: Metric.m) {
                     ForEach(GameMode.allCases) { mode in
@@ -61,12 +65,18 @@ struct TitleView: View {
 
                 Spacer(minLength: Metric.l)
 
+                BrandMark(height: 24)
+                    .padding(.bottom, Metric.xl)
+                    .skLegible()
+
                 HStack(spacing: Metric.m) {
                     Button {
                         showingFieldNotes = true
                     } label: {
                         Label("Field Notes", systemImage: "book")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.skDisplay(12, weight: .medium))
+                            .tracking(1.2)
+                            .textCase(.uppercase)
                             .padding(.horizontal, Metric.l)
                             .padding(.vertical, Metric.m)
                             .skPanel(radius: Metric.radiusLarge, material: .thinMaterial)
@@ -78,7 +88,9 @@ struct TitleView: View {
                             onStart(selectedMode, 1)
                         } label: {
                             Text("Begin")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.skDisplay(14, weight: .medium))
+                                .tracking(1.5)
+                                .textCase(.uppercase)
                                 .foregroundStyle(Color.black.opacity(0.85))
                                 .padding(.horizontal, Metric.xxl)
                                 .padding(.vertical, Metric.m)
@@ -121,7 +133,8 @@ struct ModeCard: View {
                 VStack(alignment: .leading, spacing: Metric.xs) {
                     HStack(spacing: Metric.s) {
                         Text(mode.title)
-                            .font(.skSerif(20, weight: .semibold))
+                            .font(.skDisplay(17, weight: .regular))
+                            .tracking(0.5)
                         if let progress, progress > 1 {
                             Text("tide \(min(progress, 9)) of 9")
                                 .font(.system(size: 10, weight: .semibold))
@@ -132,7 +145,8 @@ struct ModeCard: View {
                         }
                     }
                     Text(selected ? mode.longDescription : mode.subtitle)
-                        .font(.system(size: 13))
+                        .font(.skProse(11))
+                        .lineSpacing(skProseSpacing - 2)
                         .foregroundStyle(Palette.secondaryText)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -213,13 +227,14 @@ struct TideBriefView: View {
                         .font(.skLabel)
                         .foregroundStyle(Palette.accent)
                     Text(tide.name)
-                        .font(.skSerif(30, weight: .semibold))
+                        .font(.skDisplay(26, weight: .light))
+                        .tracking(2)
                         .multilineTextAlignment(.center)
                 }
 
                 Text(tide.epigraph)
-                    .font(.skSerif(16))
-                    .italic()
+                    .font(.skProse(13))
+                    .lineSpacing(skProseSpacing)
                     .foregroundStyle(Palette.secondaryText)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -243,7 +258,9 @@ struct TideBriefView: View {
 
                 Button(action: onBegin) {
                     Text("Begin")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.skDisplay(14, weight: .medium))
+                        .tracking(1.5)
+                        .textCase(.uppercase)
                         .foregroundStyle(Color.black.opacity(0.85))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Metric.m)
@@ -266,9 +283,10 @@ struct BriefStat: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            Text(value).font(.skNumeric(15, weight: .semibold))
+            Text(value).font(.skNumeric(15, weight: .medium))
             Text(label.uppercased())
-                .font(.system(size: 9, weight: .semibold))
+                .font(.skDisplay(9, weight: .semibold))
+                .tracking(1)
                 .foregroundStyle(Palette.secondaryText)
         }
         .accessibilityElement(children: .combine)
@@ -291,13 +309,13 @@ struct ResultsView: View {
             VStack(spacing: Metric.l) {
                 VStack(spacing: Metric.xs) {
                     Text(grade.letter)
-                        .font(.system(size: 66, weight: .light, design: .serif))
+                        .font(.skDisplay(64, weight: .ultraLight))
                         .foregroundStyle(Palette.accent)
                         .scaleEffect(revealed ? 1 : 0.7)
                         .opacity(revealed ? 1 : 0)
                     Text(grade.line)
-                        .font(.skSerif(16))
-                        .italic()
+                        .font(.skProse(13))
+                        .lineSpacing(skProseSpacing)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Palette.secondaryText)
                 }
@@ -328,7 +346,9 @@ struct ResultsView: View {
                         model.start(mode: .tides, tide: model.tideNumber)
                     } label: {
                         Text("Again")
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.skDisplay(13, weight: .regular))
+                            .tracking(1.2)
+                            .textCase(.uppercase)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, Metric.m)
                             .background { Capsule().fill(Palette.primaryText.opacity(0.08)) }
@@ -340,7 +360,9 @@ struct ResultsView: View {
                             model.start(mode: .tides, tide: model.tideNumber + 1)
                         } label: {
                             Text("Next tide")
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(.skDisplay(13, weight: .medium))
+                                .tracking(1.2)
+                                .textCase(.uppercase)
                                 .foregroundStyle(Color.black.opacity(0.85))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, Metric.m)

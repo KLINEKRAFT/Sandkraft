@@ -98,7 +98,7 @@ struct MouldPicker: View {
                      The wetter shapes below need damper sand to survive being \
                      turned out.
                      """)
-                    .font(.skSerif(14))
+                    .font(.skProse(12))
                     .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -150,7 +150,7 @@ struct AdornmentPicker: View {
                      anyone remembers a particular castle. They lean as the sand \
                      moves under them and go over when the water reaches them.
                      """)
-                    .font(.skSerif(14))
+                    .font(.skProse(12))
                     .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -180,7 +180,7 @@ struct LookPicker: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metric.m) {
                 Text("The same beach, the same light, the same water. Rendered nine ways.")
-                    .font(.skSerif(14))
+                    .font(.skProse(12))
                     .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -192,10 +192,9 @@ struct LookPicker: View {
                             LookSwatch(look: look)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(look.name)
-                                    .font(.system(size: 15, weight: .medium))
+                                    .font(.skDisplay(14, weight: .medium))
                                 Text(look.note)
-                                    .font(.skSerif(13))
-                                    .italic()
+                                    .font(.skProse(11))
                                     .foregroundStyle(Palette.secondaryText)
                             }
                             Spacer(minLength: 0)
@@ -422,10 +421,10 @@ struct FieldNotesView: View {
                 ForEach(Self.notes) { note in
                     VStack(alignment: .leading, spacing: Metric.s) {
                         Text(note.title)
-                            .font(.skSerif(19, weight: .semibold))
+                            .font(.skDisplay(17, weight: .medium))
                         Text(note.body)
-                            .font(.skSerif(15))
-                            .lineSpacing(3)
+                            .font(.skProse(13))
+                            .lineSpacing(skProseSpacing)
                             .foregroundStyle(Palette.primaryText.opacity(0.85))
                             .fixedSize(horizontal: false, vertical: true)
                     }

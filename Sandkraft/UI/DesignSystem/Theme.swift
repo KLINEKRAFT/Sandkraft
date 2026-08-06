@@ -15,9 +15,9 @@
 //
 //    1. Nothing sits on an opaque background. Every surface is a material over
 //       the scene, so the light on the beach reaches the interface.
-//    2. Two type families and no more — SF for anything you read at a glance, New
-//       York for anything you read as prose. The game has prose; it should look
-//       like prose.
+//    2. One typeface, everywhere: SF Mono. A monospaced face as the primary
+//       family reads as technical and precise, which is what this game is, and
+//       it puts the numeric readouts and the prose in the same voice.
 //    3. One spacing scale, one radius scale, one motion vocabulary. A control
 //       that needs a bespoke number is a control that is in the wrong place.
 //
@@ -103,26 +103,77 @@ enum Palette {
 }
 
 // MARK: - Typography
+//
+// One typeface, used for everything: SF Mono, reached through
+// `Font.system(design: .monospaced)`.
+//
+// A monospaced face as the *primary* typeface is a deliberate, current choice —
+// it reads as technical and precise, which is what this game is, and it makes
+// the numeric readouts and the prose sit in the same voice instead of feeling
+// like two different apps. SF Mono rather than a bundled Roboto Mono because it
+// costs no download, ships every weight, renders correctly at every size, and
+// respects Dynamic Type. If a bundled face is ever wanted, `Typeface.design` and
+// `Typeface.custom` below are the only two things that need to change.
+
+enum Typeface {
+    /// The single source of truth for the whole interface's face.
+    static let design: Font.Design = .monospaced
+
+    /// Set this to a bundled family name to override SF Mono everywhere.
+    /// Nothing else in the project needs to know.
+    static let custom: String? = nil
+
+    static func font(_ size: CGFloat, _ weight: Font.Weight) -> Font {
+        if let custom {
+            return .custom(custom, size: size).weight(weight)
+        }
+        return .system(size: size, weight: weight, design: design)
+    }
+}
 
 extension Font {
-    /// Prose. The tide names, the epigraphs, the field notes. A game that writes
-    /// in sentences should set them like sentences.
-    static func skSerif(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .serif)
+    /// Headings and the wordmark. Light weights only — at display sizes a
+    /// monospaced face is already assertive enough without adding weight to it.
+    static func skDisplay(_ size: CGFloat, weight: Font.Weight = .light) -> Font {
+        Typeface.font(size, weight)
     }
 
-    /// Numbers that change every frame. Monospaced digits, or the clock jitters
-    /// and the eye follows the jitter instead of the number.
+    /// Running text. Mono is unusual for prose and needs the extra leading that
+    /// `skProseSpacing` supplies at every call site.
+    static func skProse(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        Typeface.font(size, weight)
+    }
+
+    /// Numbers that change every frame. Monospaced by construction now, so the
+    /// clock no longer jitters and there is no `.monospacedDigit()` to remember.
     static func skNumeric(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {
-        .system(size: size, weight: weight, design: .rounded).monospacedDigit()
+        Typeface.font(size, weight)
     }
 
-    static let skTitle = Font.skSerif(34, weight: .semibold)
-    static let skHeadline = Font.skSerif(22, weight: .semibold)
-    static let skBody = Font.system(.body)
-    static let skCaption = Font.system(.caption)
-    static let skLabel = Font.system(size: 11, weight: .semibold).width(.expanded)
+    static let skTitle = Font.skDisplay(30, weight: .light)
+    static let skHeadline = Font.skDisplay(19, weight: .regular)
+    static let skBody = Typeface.font(13, .regular)
+    static let skCaption = Typeface.font(11, .regular)
+
+    /// Small uppercase labels. The workhorse of the interface.
+    static let skLabel = Typeface.font(10, .semibold)
 }
+
+extension Text {
+    /// A small uppercase label with the tracking that makes letterspaced mono
+    /// read as a label rather than as shouting.
+    func skLabelStyle(_ tint: Color = Palette.secondaryText) -> some View {
+        self.font(.skLabel)
+            .tracking(1.2)
+            .textCase(.uppercase)
+            .foregroundStyle(tint)
+    }
+}
+
+/// Extra line spacing for multi-paragraph text. A monospaced face needs more
+/// leading than a proportional one to stay readable at length — without this,
+/// the Field Notes turn into a wall.
+let skProseSpacing: CGFloat = 6
 
 // MARK: - Motion
 //

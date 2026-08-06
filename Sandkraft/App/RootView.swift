@@ -137,8 +137,8 @@ struct LoadingView: View {
             .frame(width: 180, height: 40)
 
             Text("SANDKRAFT")
-                .font(.system(size: 18, weight: .light, design: .serif))
-                .tracking(8)
+                .font(.skDisplay(15, weight: .light))
+                .tracking(9)
                 .foregroundStyle(Palette.secondaryText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -153,9 +153,9 @@ struct FailureView: View {
     var body: some View {
         VStack(spacing: Metric.l) {
             Text("Sandkraft cannot start")
-                .font(.skSerif(24, weight: .semibold))
+                .font(.skDisplay(22, weight: .regular))
             Text(message)
-                .font(.system(size: 14))
+                .font(.skProse(13))
                 .foregroundStyle(Palette.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
@@ -163,8 +163,8 @@ struct FailureView: View {
                  The whole of this game runs on the GPU — the sand, the water and \
                  the light. There is no version of it that runs without one.
                  """)
-                .font(.skSerif(13))
-                .italic()
+                .font(.skProse(12))
+                .lineSpacing(skProseSpacing)
                 .foregroundStyle(Palette.secondaryText.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
