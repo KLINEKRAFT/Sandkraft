@@ -1,0 +1,68 @@
+name: Build
+
+# The whole point of this workflow: Sandkraft is written in Swift and Metal, and
+# there is no way to know whether it compiles without a Mac. Both destinations
+# are built because the two platforms genuinely diverge — AppKit vs UIKit input,
+# and a handful of SwiftUI APIs that exist on only one of them.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            destination: "platform=macOS,arch=arm64"
+          - name: iOS Simulator
+            destination: "platform=iOS Simulator,name=iPhone 16,OS=latest"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          xcrun metal --version || true
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Sandkraft.xcodeproj \
+            -scheme Sandkraft \
+            -configuration Debug \
+            -destination "${{ matrix.destination }}" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            ONLY_ACTIVE_ARCH=YES
+
+      # A green build says the Metal library linked, but not that every kernel
+      # is reachable. This lists what actually made it in, so a shader that was
+      # silently dropped from the target shows up as a missing name rather than
+      # as a nil pipeline at launch.
+      - name: Metal library contents
+        if: success()
+        run: |
+          LIB=$(find ~/Library/Developer/Xcode/DerivedData -name 'default.metallib' | head -1)
+          if [ -n "$LIB" ]; then
+            echo "metallib: $LIB"
+            strings "$LIB" | grep -E '^(sim_|metrics_|deposit_|terrain_|water_|sky_|post_|particle_|prop_)' | sort -u
+          else
+            echo "No default.metallib found — the shaders may not be in the target."
+            exit 1
+          fi
