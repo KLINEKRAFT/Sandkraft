@@ -334,6 +334,8 @@ struct QuickControls: View {
     @Binding var sheet: PlaySheet?
     var vertical: Bool
 
+    @Environment(\.skReturnToTitle) private var returnToTitle
+
     var body: some View {
         let layout = vertical
             ? AnyLayout(VStackLayout(spacing: Metric.s))
@@ -353,6 +355,11 @@ struct QuickControls: View {
                 model.isPaused.toggle()
             }
             IconButton(glyph: .settings, label: "Settings") { sheet = .settings }
+            // `skReturnToTitle` has been in the environment since the first
+            // build and nothing ever read it, so there was no way back to the
+            // title at all. Leaving is non-destructive — the beach stays exactly
+            // as it is behind the title, and Resume comes back to it.
+            IconButton(glyph: .close, label: "Title screen") { returnToTitle() }
         }
     }
 }

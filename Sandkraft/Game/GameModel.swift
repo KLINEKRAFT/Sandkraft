@@ -441,6 +441,7 @@ final class GameModel {
                 advancePhaseIfNeeded()
             }
             if isStroking { strokeElapsed += dt }
+            fillMould(dt: dt)
             updateProps(dt: Float(dt))
         }
 
@@ -648,20 +649,35 @@ final class GameModel {
         strokePrevious = strokeCurrent
         strokeCurrent = sample
 
-        if tool.id == .mould {
-            // Filling. The mould takes what is under it, and what it takes is what
-            // will come back out — including how wet it was.
-            mouldFillProgress = min(mouldFillProgress + 0.02, 1)
-            let blend = 0.12
-            mouldCharge.moisture = mouldCharge.moisture * (1 - blend) + Double(sample.moisture) * blend
-            mouldCharge.ready = mouldFillProgress > 0.35
-        }
-
         if tool.ledger == .takes {
             // Track what the pail is filling up with, weighted by how much came in.
             let blend = 0.06
             pailMoisture = pailMoisture * (1 - blend) + Double(sample.moisture) * blend
         }
+    }
+
+    /// Seconds of holding to fill a mould completely. Ready to turn out at 35% of
+    /// it, so about four tenths of a second of contact.
+    static let mouldFillSeconds: Double = 1.1
+
+    /// Filling a mould is a function of *time*, not of pointer movement.
+    ///
+    /// It used to live in `continueStroke`, which only fires when the pointer
+    /// moves — so holding a mould still over one spot, which is exactly what
+    /// holding a mould means, advanced the fill by nothing at all. The scoop ran
+    /// every frame regardless, so the tool dug a mould-shaped hole and then
+    /// turned out nothing, every time, unless you happened to jiggle the mouse
+    /// eighteen times while pressing.
+    private func fillMould(dt: Double) {
+        guard isStroking, tool.id == .mould, let sample = strokeCurrent else { return }
+
+        mouldFillProgress = min(mouldFillProgress + dt / Self.mouldFillSeconds, 1)
+
+        // What the mould takes is what comes back out, wetness included. Framerate
+        // independent, so a fast machine does not average differently to a slow one.
+        let blend = min(dt * 6.0, 1.0)
+        mouldCharge.moisture = mouldCharge.moisture * (1 - blend) + Double(sample.moisture) * blend
+        mouldCharge.ready = mouldFillProgress > 0.35
     }
 
     func endStroke() {
