@@ -99,7 +99,28 @@ struct RootView: View {
 // MARK: - Launch states
 
 struct LoadingView: View {
-    @State private var phase: CGFloat = 0
+
+    /// Two sine terms over a normalised span. Every value is explicitly CGFloat.
+    ///
+    /// Written out longhand on purpose: the obvious one-expression version mixes
+    /// CGFloat from the canvas size with the TimeInterval from the timeline, and
+    /// the type-checker gives up trying to reconcile the literals. This is not a
+    /// style preference — it is the difference between compiling and not.
+    private func tideLine(in size: CGSize, phase: CGFloat) -> Path {
+        var path = Path()
+        let steps = 60
+        let midY: CGFloat = size.height / 2
+        for i in 0...steps {
+            let u = CGFloat(i) / CGFloat(steps)
+            let x: CGFloat = size.width * u
+            let swell: CGFloat = sin(u * 6 + phase * 1.4) * 6
+            let chop: CGFloat = sin(u * 11 - phase * 0.9) * 3
+            let y: CGFloat = midY + swell + chop
+            let point = CGPoint(x: x, y: y)
+            if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        return path
+    }
 
     var body: some View {
         VStack(spacing: Metric.l) {
@@ -107,18 +128,9 @@ struct LoadingView: View {
             // "something is happening"; this says "the sea is happening".
             TimelineView(.animation) { timeline in
                 Canvas { context, size in
-                    let t = timeline.date.timeIntervalSinceReferenceDate
-                    var path = Path()
-                    let steps = 60
-                    for i in 0...steps {
-                        let x = size.width * CGFloat(i) / CGFloat(steps)
-                        let y = size.height / 2
-                            + sin(CGFloat(i) / CGFloat(steps) * 6 + t * 1.4) * 6
-                            + sin(CGFloat(i) / CGFloat(steps) * 11 - t * 0.9) * 3
-                        if i == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                        else { path.addLine(to: CGPoint(x: x, y: y)) }
-                    }
-                    context.stroke(path, with: .color(Palette.accent.opacity(0.85)),
+                    let phase = CGFloat(timeline.date.timeIntervalSinceReferenceDate)
+                    context.stroke(tideLine(in: size, phase: phase),
+                                   with: .color(Palette.accent.opacity(0.85)),
                                    style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 }
             }
