@@ -429,9 +429,111 @@ struct FieldNotesView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+
+                ControlsReference()
             }
             .padding(Metric.xl)
             .frame(maxWidth: 640, alignment: .leading)
+        }
+    }
+}
+
+// MARK: - Controls
+
+/// Every shortcut and gesture, in the app rather than in a README.
+///
+/// The tool rows are generated from `Tool.all`, so a tool that changes its key —
+/// or a tool that gets added — cannot leave a lie behind on this page. The rest
+/// is hand-written because it corresponds to menu items and gesture recognisers
+/// that have no single table to read from.
+struct ControlsReference: View {
+    private struct Row: Identifiable {
+        let id = UUID()
+        let keys: String
+        let what: String
+    }
+
+    private struct Block: Identifiable {
+        let id = UUID()
+        let title: String
+        let rows: [Row]
+    }
+
+    private var blocks: [Block] {
+        var all: [Block] = []
+
+        #if os(macOS)
+        all.append(Block(title: "Tools",
+                         rows: Tool.all.map { Row(keys: String($0.shortcut), what: $0.name) }))
+
+        all.append(Block(title: "Brush", rows: [
+            Row(keys: "]", what: "Bigger — one detent, about 15%"),
+            Row(keys: "[", what: "Smaller"),
+            Row(keys: "⌘B", what: "Round footprint"),
+            Row(keys: "⇧⌘B", what: "Square footprint")
+        ]))
+
+        all.append(Block(title: "The beach", rows: [
+            Row(keys: "Space", what: "Pause"),
+            Row(keys: "⇧⌘R", what: "Reset the beach"),
+            Row(keys: "⌘L", what: "Next look"),
+            Row(keys: "⇧⌘L", what: "Previous look")
+        ]))
+
+        all.append(Block(title: "App", rows: [
+            Row(keys: "⌘Z", what: "Undo"),
+            Row(keys: "⇧⌘Z", what: "Redo"),
+            Row(keys: "⌘,", what: "Settings"),
+            Row(keys: "⌘/", what: "This page"),
+            Row(keys: "Return", what: "The accented button — Begin, or Next tide")
+        ]))
+
+        all.append(Block(title: "Pointer", rows: [
+            Row(keys: "Drag", what: "Use the selected tool"),
+            Row(keys: "⌥ drag", what: "Orbit the camera"),
+            Row(keys: "Right drag", what: "Orbit — the same thing, for a mouse"),
+            Row(keys: "Scroll", what: "Pan"),
+            Row(keys: "⇧ scroll", what: "Orbit"),
+            Row(keys: "⌘ scroll", what: "Move closer or further away"),
+            Row(keys: "Pinch", what: "Move closer or further away"),
+            Row(keys: "Rotate", what: "Turn the mould under the cursor")
+        ]))
+        #else
+        all.append(Block(title: "Touch", rows: [
+            Row(keys: "Drag", what: "Use the selected tool"),
+            Row(keys: "Two fingers", what: "Pan and orbit the camera"),
+            Row(keys: "Pinch", what: "Move closer or further away"),
+            Row(keys: "Rotate", what: "Turn the mould under your finger")
+        ]))
+        #endif
+
+        return all
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metric.l) {
+            Text("Controls")
+                .font(.skDisplay(17, weight: .medium))
+
+            ForEach(blocks) { block in
+                VStack(alignment: .leading, spacing: Metric.s) {
+                    Text(block.title).skLabelStyle()
+
+                    ForEach(block.rows) { row in
+                        HStack(alignment: .top, spacing: Metric.m) {
+                            Text(row.keys)
+                                .font(.skNumeric(12, weight: .medium))
+                                .frame(width: 84, alignment: .leading)
+                            Text(row.what)
+                                .font(.skProse(12))
+                                .foregroundStyle(Palette.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
         }
     }
 }

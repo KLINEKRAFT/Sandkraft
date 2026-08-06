@@ -73,14 +73,29 @@ struct SandkraftCommands: Commands {
                 .keyboardShortcut(KeyEquivalent(tool.shortcut), modifiers: [])
             }
             Divider()
+            // Detents, not factors. The size control is logarithmic, so one
+            // press is one step of the same size wherever you are in the range
+            // — and the menu no longer has to know what that size is.
             Button("Bigger brush") {
-                NotificationCenter.default.post(name: .skAdjustBrush, object: 1.15)
+                NotificationCenter.default.post(name: .skAdjustBrush, object: 1.0)
             }
             .keyboardShortcut("]", modifiers: [])
             Button("Smaller brush") {
-                NotificationCenter.default.post(name: .skAdjustBrush, object: 1 / 1.15)
+                NotificationCenter.default.post(name: .skAdjustBrush, object: -1.0)
             }
             .keyboardShortcut("[", modifiers: [])
+
+            Divider()
+            Button("Round brush") {
+                NotificationCenter.default.post(name: .skSetBrushShape,
+                                                object: BrushShape.round.rawValue)
+            }
+            .keyboardShortcut("b", modifiers: [.command])
+            Button("Square brush") {
+                NotificationCenter.default.post(name: .skSetBrushShape,
+                                                object: BrushShape.square.rawValue)
+            }
+            .keyboardShortcut("b", modifiers: [.command, .shift])
         }
 
         CommandMenu("Beach") {
@@ -123,6 +138,7 @@ struct SandkraftCommands: Commands {
 extension Notification.Name {
     static let skSelectTool = Notification.Name("sk.selectTool")
     static let skAdjustBrush = Notification.Name("sk.adjustBrush")
+    static let skSetBrushShape = Notification.Name("sk.setBrushShape")
     static let skTogglePause = Notification.Name("sk.togglePause")
     static let skResetBeach = Notification.Name("sk.resetBeach")
     static let skCycleLook = Notification.Name("sk.cycleLook")

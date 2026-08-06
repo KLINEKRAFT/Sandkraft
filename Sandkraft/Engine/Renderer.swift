@@ -38,6 +38,9 @@ struct FrameInput {
     var cursorWorld = SIMD2<Float>.zero
     var cursorRadius: Float = 1
     var cursorVisible = false
+    /// Draws the ring as a square instead of a circle, so the cursor tells the
+    /// truth about the footprint the solver is about to apply.
+    var cursorSquare = false
 
     var ghostVisible = false
     var ghostOrigin = SIMD2<Float>.zero
@@ -343,8 +346,12 @@ final class Renderer: NSObject {
         t.outer = outer ? 1 : 0
         t.cell = simulation.cellSize
         t.lanternCount = Float(min(input.lanterns.count, 16))
+        // w is a small enum rather than a flag: 0 hidden, 1 round, 2 square. The
+        // shader's existing `> 0.5` visibility test still reads correctly.
+        var cursorMode: Float = 0
+        if input.cursorVisible { cursorMode = input.cursorSquare ? 2 : 1 }
         t.cursor = SIMD4(input.cursorWorld.x, input.cursorWorld.y,
-                         input.cursorRadius, input.cursorVisible ? 1 : 0)
+                         input.cursorRadius, cursorMode)
         t.ghost = SIMD4(input.ghostRadius, input.ghostRotation,
                         Float(input.ghostShape), input.ghostVisible ? 1 : 0)
         t.ghost2 = SIMD4(input.ghostDetail, 0, 0, 0)

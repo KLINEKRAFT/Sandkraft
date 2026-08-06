@@ -67,6 +67,20 @@ inline float sk_segDist(float2 p, float2 a, float2 b) {
     return length(pa - ba * t);
 }
 
+/// The same swept stroke, measured in L∞ instead of L².
+///
+/// The isolines of max(|x|, |y|) are concentric squares, so this one metric
+/// switch turns a round spade into a square one without a single tool having to
+/// know about it — every mode below is written against the falloff `w`, not
+/// against the distance. The square is world-axis aligned, so a wall swept along
+/// X comes out with straight ends rather than rounded ones.
+inline float sk_segDistSquare(float2 p, float2 a, float2 b) {
+    float2 pa = p - a, ba = b - a;
+    float t = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6f), 0.0f, 1.0f);
+    float2 q = abs(pa - ba * t);
+    return max(q.x, q.y);
+}
+
 /// How hard the sea is working this cell, right now.
 inline float sk_waveWork(float2 wp, float groundY, constant SKSimUniforms &u) {
     if (u.erosion <= 0.0f) { return 0.0f; }
@@ -266,7 +280,8 @@ kernel void sim_step(texture2d<float, access::read>  inSand    [[texture(0)]],
     int mode = int(u.brushB.z + 0.5f);
     if (mode > 0) {
         float r = u.brushA.z;
-        float d = sk_segDist(wp, u.brushA.xy, u.brushB.xy);
+        float d = u.stamp3.w > 0.5f ? sk_segDistSquare(wp, u.brushA.xy, u.brushB.xy)
+                                    : sk_segDist(wp, u.brushA.xy, u.brushB.xy);
         float w = 1.0f - smoothstep(r * 0.24f, r, d);
         if (w > 0.0015f) {
             float s = u.brushA.w * u.dt;

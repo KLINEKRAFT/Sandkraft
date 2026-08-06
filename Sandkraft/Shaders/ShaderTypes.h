@@ -80,7 +80,10 @@ typedef struct {
     simd_float4 brushB;              // stroke end x, z · mode · mode parameter
     simd_float4 stamp;               // mould x, z · radius · height
     simd_float4 stamp2;              // detail · baseY · gate · active
-    simd_float4 stamp3;              // mouldID · rotation · moisture · spare
+    simd_float4 stamp3;              // mouldID · rotation · moisture · brush shape
+                                     //   w: 0 round footprint, 1 square. Belongs
+                                     //   to the stroke rather than to the mould,
+                                     //   and is written after both stamp branches.
 
     simd_float2 texel;
     float simResolution;

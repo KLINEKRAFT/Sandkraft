@@ -37,6 +37,40 @@ enum ToolMode: Int32, Sendable {
     case scoop   = 11
 }
 
+// MARK: - Brush shape
+
+/// The footprint every stroke tool sweeps along its path.
+///
+/// This is not a per-tool property and deliberately so: it is a statement about
+/// how *you* work, not about what a spade is, and having to set it once per tool
+/// would be an interface asking the player to repeat themselves nine times.
+///
+/// In the solver it is one metric switch — L² gives a disc, L∞ gives a square,
+/// and every tool's behaviour is expressed in terms of the resulting falloff, so
+/// nothing else has to know. The square is world-axis aligned, which keeps a
+/// wall you sweep along X actually straight.
+enum BrushShape: String, CaseIterable, Identifiable, Codable, Sendable {
+    case round
+    case square
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .round:  return "Round"
+        case .square: return "Square"
+        }
+    }
+
+    /// What the solver reads out of `stamp3.w`.
+    var rawFlag: Float {
+        switch self {
+        case .round:  return 0
+        case .square: return 1
+        }
+    }
+}
+
 // MARK: - Family
 
 enum ToolFamily: String, CaseIterable, Identifiable, Sendable {

@@ -388,7 +388,12 @@ fragment float4 terrain_fragment(TerrainVertexOut in [[stage_in]],
     //      change instead of floating above it.
     if (terrain.cursor.w > 0.5f) {
         float r = max(terrain.cursor.z, 0.02f);
-        float d = length(wp - terrain.cursor.xy);
+        // Measured in the same metric the solver is about to use — L² draws a
+        // circle, L∞ draws a square — so the ring is never a promise the brush
+        // does not keep. Both metrics have unit gradient across an edge, so the
+        // line width below needs no special case.
+        float2 rel = wp - terrain.cursor.xy;
+        float d = terrain.cursor.w > 1.5f ? max(abs(rel.x), abs(rel.y)) : length(rel);
         float ew = max(fw * 1.6f, r * 0.012f);
         float ring = 1.0f - smoothstep(ew, ew * 2.4f, abs(d - r));
         ring *= 1.0f - vertical * 0.75f;
