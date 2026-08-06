@@ -223,7 +223,7 @@ struct DayReadout: View {
                 Text(SunPath.clockText(dayFraction: model.dayFraction))
                     .font(.skNumeric(13, weight: .semibold))
                 Text(SunPath.phaseName(dayFraction: model.dayFraction))
-                    .font(.system(size: 10))
+                    .font(Typeface.font(10, .regular))
                     .foregroundStyle(Palette.secondaryText)
             }
         }
@@ -330,7 +330,7 @@ struct ToolRail: View {
                     ForEach(ToolFamily.allCases) { f in
                         VStack(spacing: Metric.xs) {
                             Text(f.title.uppercased())
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(Typeface.font(9, .semibold))
                                 .foregroundStyle(Palette.secondaryText)
                             ForEach(model.availableTools.filter { $0.family == f }) { tool in
                                 ToolChip(tool: tool,
@@ -364,7 +364,7 @@ struct ToolRail: View {
                     family = f
                 } label: {
                     Text(f.title)
-                        .font(.system(size: 12, weight: family == f ? .semibold : .regular))
+                        .font(Typeface.font(12, family == f ? .semibold : .regular))
                         .foregroundStyle(family == f ? Palette.primaryText : Palette.secondaryText)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Metric.xs + 2)
@@ -410,9 +410,9 @@ struct ToolRail: View {
             Button { sheet = .mould } label: {
                 HStack(spacing: Metric.s) {
                     GlyphView(glyph: model.mould.glyph, size: 20, weight: 1.6)
-                    Text(model.mould.name).font(.system(size: 12, weight: .medium))
+                    Text(model.mould.name).font(Typeface.font(12, .medium))
                     Spacer(minLength: 0)
-                    Text("Change").font(.system(size: 11)).foregroundStyle(Palette.secondaryText)
+                    Text("Change").font(Typeface.font(11, .regular)).foregroundStyle(Palette.secondaryText)
                 }
                 .padding(.horizontal, Metric.m)
                 .padding(.vertical, Metric.s)
@@ -426,9 +426,9 @@ struct ToolRail: View {
             Button { sheet = .adornment } label: {
                 HStack(spacing: Metric.s) {
                     GlyphView(glyph: model.adornment.glyph, size: 20, weight: 1.6)
-                    Text(model.adornment.name).font(.system(size: 12, weight: .medium))
+                    Text(model.adornment.name).font(Typeface.font(12, .medium))
                     Spacer(minLength: 0)
-                    Text("Change").font(.system(size: 11)).foregroundStyle(Palette.secondaryText)
+                    Text("Change").font(Typeface.font(11, .regular)).foregroundStyle(Palette.secondaryText)
                 }
                 .padding(.horizontal, Metric.m)
                 .padding(.vertical, Metric.s)
@@ -440,7 +440,7 @@ struct ToolRail: View {
             .buttonStyle(.plain)
         default:
             HStack(spacing: Metric.s) {
-                Text("Size").font(.system(size: 11)).foregroundStyle(Palette.secondaryText)
+                Text("Size").font(Typeface.font(11, .regular)).foregroundStyle(Palette.secondaryText)
                 Slider(value: $model.brushScale, in: 0.45...2.0)
                     .controlSize(.small)
                     .tint(Palette.accent)

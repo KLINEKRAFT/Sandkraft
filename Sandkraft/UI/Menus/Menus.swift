@@ -35,8 +35,7 @@ struct TitleView: View {
                         .skLegible()
 
                     Text("A sandcastle simulator")
-                        .skLabelStyle(Palette.secondaryText)
-                        .tracking(3)
+                        .skLabelStyle(Palette.secondaryText, tracking: 3)
                         .skLegible()
                 }
                 .padding(.bottom, Metric.xxxl)
@@ -73,9 +72,9 @@ struct TitleView: View {
                     Button {
                         showingFieldNotes = true
                     } label: {
-                        Label("Field Notes", systemImage: "book")
+                        Text("Field Notes")
                             .font(.skDisplay(12, weight: .medium))
-                            .tracking(1.2)
+                            .tracking(1.4)
                             .textCase(.uppercase)
                             .padding(.horizontal, Metric.l)
                             .padding(.vertical, Metric.m)
@@ -137,7 +136,7 @@ struct ModeCard: View {
                             .tracking(0.5)
                         if let progress, progress > 1 {
                             Text("tide \(min(progress, 9)) of 9")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(Typeface.font(10, .semibold))
                                 .foregroundStyle(Palette.accent)
                                 .padding(.horizontal, Metric.s)
                                 .padding(.vertical, 2)
@@ -186,7 +185,7 @@ struct TidePicker: View {
                             Text("\(tide.number)")
                                 .font(.skNumeric(20, weight: .semibold))
                             Text(tide.name)
-                                .font(.system(size: 10))
+                                .font(Typeface.font(10, .regular))
                                 .lineLimit(2)
                                 .multilineTextAlignment(.center)
                                 .frame(height: 26)

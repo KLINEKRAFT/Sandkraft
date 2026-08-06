@@ -122,7 +122,7 @@ struct MouldPicker: View {
                         Text(Palette.moistureLabel(model.mould.minimumMoisture))
                             .foregroundStyle(Palette.moisture(model.mould.minimumMoisture))
                     }
-                    .font(.system(size: 13))
+                    .font(Typeface.font(13, .regular))
                     MeterBar(value: model.mould.minimumMoisture,
                              tint: Palette.moisture(model.mould.minimumMoisture))
                 }
@@ -267,7 +267,7 @@ struct SettingsView: View {
                     }
                 }
                 Text(model.daySpeed.subtitle)
-                    .font(.caption)
+                    .font(.skCaption)
                     .foregroundStyle(Palette.secondaryText)
 
                 VStack(alignment: .leading) {
@@ -312,18 +312,18 @@ struct SettingsView: View {
                     }
                 }
                 Text(model.qualityTier.note)
-                    .font(.caption)
+                    .font(.skCaption)
                     .foregroundStyle(Palette.secondaryText)
                 LabeledContent("Approximate memory",
                                value: "\(model.qualityTier.approximateMemoryMB) MB")
-                    .font(.caption)
+                    .font(.skCaption)
                 LabeledContent("Beach mesh", value: model.qualityTier.meshDescription)
-                    .font(.caption)
+                    .font(.skCaption)
                 Text("""
                      Changing quality rebuilds the simulation, which means laying \
                      down a fresh beach. Finish what you are working on first.
                      """)
-                    .font(.caption)
+                    .font(.skCaption)
                     .foregroundStyle(Palette.secondaryText)
             }
 
