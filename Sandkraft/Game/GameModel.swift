@@ -391,6 +391,16 @@ final class GameModel {
         frameMilliseconds = seconds * 1000
     }
 
+    /// Preformatted here rather than in the view. `String(format:)` is variadic
+    /// over CVarArg, and a ternary inside one inside a ViewBuilder is the exact
+    /// shape that makes the type-checker give up — twice now, in two different
+    /// files. Plain Swift, plain statements, no inference to do.
+    var frameTimeDescription: String {
+        guard frameMilliseconds > 0.01 else { return "—" }
+        let fps = 1000.0 / frameMilliseconds
+        return String(format: "%.1f ms · %.0f fps", frameMilliseconds, fps)
+    }
+
     func ingest(canUndo u: Bool, canRedo r: Bool) {
         canUndo = u
         canRedo = r

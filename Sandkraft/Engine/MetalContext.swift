@@ -155,6 +155,14 @@ enum QualityTier: Int, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
+    /// Vertex count of the beach mesh, for the settings screen. Computed here as
+    /// plain arithmetic for the same reason as `frameTimeDescription`.
+    var meshDescription: String {
+        let edge = terrainGrid - 1
+        let vertices = edge * edge * 6
+        return "\(vertices / 1000)k vertices"
+    }
+
     var wantsBloom: Bool { self != .low }
     var wantsSoftShadows: Bool { self.rawValue >= QualityTier.medium.rawValue }
 
