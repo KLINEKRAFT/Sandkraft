@@ -15,6 +15,10 @@ import SwiftUI
 
 struct TitleView: View {
     @Bindable var model: GameModel
+    /// Nil until a session exists. When it does, the title becomes a screen you
+    /// can back out of rather than a door that only opens one way — which is
+    /// what makes the new Title button in the play view safe to press.
+    var onResume: (() -> Void)?
     var onStart: (GameMode, Int) -> Void
     @State private var selectedMode: GameMode = .shore
     @State private var showingFieldNotes = false
@@ -69,6 +73,20 @@ struct TitleView: View {
                     .skLegible()
 
                 HStack(spacing: Metric.m) {
+                    if let onResume {
+                        Button(action: onResume) {
+                            Text("Resume")
+                                .font(.skDisplay(12, weight: .medium))
+                                .tracking(1.4)
+                                .textCase(.uppercase)
+                                .padding(.horizontal, Metric.l)
+                                .padding(.vertical, Metric.m)
+                                .skPanel(radius: Metric.radiusLarge, material: .thinMaterial)
+                        }
+                        .buttonStyle(.soft)
+                        .keyboardShortcut(.cancelAction)
+                    }
+
                     Button {
                         showingFieldNotes = true
                     } label: {

@@ -41,6 +41,35 @@ struct PhotoDocument: FileDocument {
     }
 }
 
+extension UTType {
+    /// Built from the extension rather than declared with `exportedAs`, which
+    /// requires a matching `UTExportedTypeDeclarations` entry in Info.plist and
+    /// traps at runtime without one. A dynamic type filters the open panel by
+    /// extension, which is the whole of what is needed here.
+    static var sandkraftBeach: UTType {
+        UTType(filenameExtension: "sandkraft", conformingTo: .data) ?? .data
+    }
+}
+
+/// A saved beach on its way to or from disk.
+struct BeachFile: FileDocument {
+    static var readableContentTypes: [UTType] { [.sandkraftBeach] }
+
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
 struct PlayView: View {
     @Bindable var model: GameModel
     let coordinator: SceneCoordinator
@@ -58,6 +87,9 @@ struct PlayView: View {
     @State private var hintTask: Task<Void, Never>?
     @State private var photo: PhotoDocument?
     @State private var exportingPhoto = false
+    @State private var beach: BeachFile?
+    @State private var exportingBeach = false
+    @State private var importingBeach = false
 
     private var isCompact: Bool {
         #if os(macOS)
@@ -133,6 +165,50 @@ struct PlayView: View {
             case .success: showHint("Photograph saved.")
             case .failure: showHint("The photograph could not be saved.")
             }
+        }
+        .onChange(of: model.openBeachWanted) { _, wants in
+            guard wants else { return }
+            model.openBeachWanted = false
+            importingBeach = true
+        }
+        .onChange(of: model.pendingBeach != nil) { _, ready in
+            guard ready, let data = model.pendingBeach else { return }
+            beach = BeachFile(data: data)
+            exportingBeach = true
+            model.pendingBeach = nil
+        }
+        .fileExporter(isPresented: $exportingBeach,
+                      document: beach,
+                      contentType: .sandkraftBeach,
+                      defaultFilename: BeachDocumentFormat.suggestedFilename()) { result in
+            beach = nil
+            switch result {
+            case .success: showHint("Beach saved.")
+            case .failure: showHint("The beach could not be saved.")
+            }
+        }
+        .fileImporter(isPresented: $importingBeach,
+                      allowedContentTypes: [.sandkraftBeach]) { result in
+            switch result {
+            case .success(let url):
+                // Sandboxed, so the panel's grant has to be opened explicitly
+                // and closed again — without this the read fails with a
+                // permission error on a file the player just chose by hand.
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                if let data = try? Data(contentsOf: url) {
+                    model.pendingBeachLoad = data
+                } else {
+                    showHint("That beach could not be read.")
+                }
+            case .failure:
+                showHint("That beach could not be opened.")
+            }
+        }
+        .onChange(of: model.beachMessage != nil) { _, hasMessage in
+            guard hasMessage, let message = model.beachMessage else { return }
+            showHint(message)
+            model.beachMessage = nil
         }
         .onChange(of: reduceMotion) { _, newValue in model.reducedMotion = newValue }
         .onChange(of: model.hapticsEnabled) { _, newValue in coordinator.haptics.enabled = newValue }
@@ -334,6 +410,8 @@ struct QuickControls: View {
     @Binding var sheet: PlaySheet?
     var vertical: Bool
 
+    @Environment(\.skReturnToTitle) private var returnToTitle
+
     var body: some View {
         let layout = vertical
             ? AnyLayout(VStackLayout(spacing: Metric.s))
@@ -353,6 +431,11 @@ struct QuickControls: View {
                 model.isPaused.toggle()
             }
             IconButton(glyph: .settings, label: "Settings") { sheet = .settings }
+            // `skReturnToTitle` has been in the environment since the first
+            // build and nothing ever read it, so there was no way back to the
+            // title at all. Leaving is non-destructive — the beach stays exactly
+            // as it is behind the title, and Resume comes back to it.
+            IconButton(glyph: .close, label: "Title screen") { returnToTitle() }
         }
     }
 }

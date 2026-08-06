@@ -65,6 +65,7 @@ final class AppEngine {
 struct RootView: View {
     @State private var engine = AppEngine()
     @State private var showingTitle = true
+    @State private var startedSession = false
 
     var body: some View {
         ZStack {
@@ -83,9 +84,16 @@ struct RootView: View {
                     .allowsHitTesting(!showingTitle)
 
                 if showingTitle {
-                    TitleView(model: engine.model) { mode, tide in
+                    // Resume appears only once there is something to resume. The
+                    // beach is still there, untouched, behind the blur — the
+                    // title is an overlay, not a teardown.
+                    TitleView(model: engine.model,
+                              onResume: startedSession
+                                  ? { withAnimation(.skSlow) { showingTitle = false } }
+                                  : nil) { mode, tide in
                         engine.model.start(mode: mode, tide: tide)
                         coordinator.resetBeach()
+                        startedSession = true
                         withAnimation(.skSlow) { showingTitle = false }
                     }
                     .transition(.opacity)
