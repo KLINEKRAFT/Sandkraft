@@ -1,25 +1,27 @@
 Klinekraft mark
 ===============
 
-Two empty slots, ready for artwork. Drag files onto them in Xcode's asset
-catalogue editor, or drop them in this folder and add the filenames to the two
-entries in Contents.json.
+Drop ONE file in. Its colour does not matter.
 
-  Any Appearance   the dark-green mark, for light backgrounds
-  Dark Appearance  the light/white mark
+Template rendering is switched on, so the artwork's own colours are discarded and
+the mark is tinted to match the interface — light grey on the near-black title
+screen. That means the dark-green original works exactly as well as a white
+version, and there is nothing to keep in sync.
 
-The title screen is near-black and the app forces dark mode, so the Dark slot is
-the one that will actually be seen. Filling only Any will leave a dark-green mark
-on a near-black screen.
+  1. Open Assets.xcassets in Xcode, select KlinekraftLogo
+  2. Drag the file onto the "Any Appearance" slot
 
-PDF is preferred — "preserves-vector-representation" is already set, so a single
+A PDF is preferred: "preserves-vector-representation" is already set, so one
 vector file covers every scale on every display. A PNG set at @1x/@2x/@3x works
-too.
+too. The second (Dark Appearance) slot can stay empty — it exists only for the
+case below.
 
-Template rendering is on, so the artwork is tinted by the view's foreground
-colour and its own colours are ignored. If the mark should keep its brand green,
-change "template-rendering-intent" to "original" here and drop the
-`.renderingMode(.template)` line in BrandMark.swift.
+To keep the brand green instead
+-------------------------------
+Change "template-rendering-intent" to "original" in Contents.json and remove the
+`.renderingMode(.template)` line from BrandMark.swift. Then the Dark slot starts
+to matter, because #17543F on a near-black screen is invisible — put the light
+version there and the green one in Any.
 
-Until a file is present, BrandMark falls back to a typeset wordmark. Nothing
-breaks; it just is not your logo yet.
+Until a file is present, BrandMark falls back to a typeset wordmark shaped like
+the real mark. Nothing breaks; it just is not your logo yet.
