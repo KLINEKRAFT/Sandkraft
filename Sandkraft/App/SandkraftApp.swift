@@ -1,0 +1,101 @@
+//
+//  SandkraftApp.swift
+//  Sandkraft
+//
+//  One multiplatform target. The iPhone build and the Mac build are the same
+//  binary target compiled twice, not a shared framework with two shells: about
+//  ninety per cent of the code is genuinely identical, and the ten per cent that
+//  is not is input handling and window chrome, which is exactly the ten per cent
+//  that should differ.
+//
+
+import SwiftUI
+
+@main
+struct SandkraftApp: App {
+
+    var body: some Scene {
+        WindowGroup {
+            RootView()
+        }
+        #if os(macOS)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentMinSize)
+        .commands { SandkraftCommands() }
+        #endif
+    }
+}
+
+#if os(macOS)
+
+/// The menu bar. A Mac app without one is a phone app in a window, and every
+/// item here is something a keyboard-first player will reach for.
+struct SandkraftCommands: Commands {
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) { }
+
+        CommandMenu("Tools") {
+            ForEach(Tool.all) { tool in
+                Button(tool.name) {
+                    NotificationCenter.default.post(name: .skSelectTool, object: tool.id)
+                }
+                .keyboardShortcut(KeyEquivalent(tool.shortcut), modifiers: [])
+            }
+            Divider()
+            Button("Bigger brush") {
+                NotificationCenter.default.post(name: .skAdjustBrush, object: 1.15)
+            }
+            .keyboardShortcut("]", modifiers: [])
+            Button("Smaller brush") {
+                NotificationCenter.default.post(name: .skAdjustBrush, object: 1 / 1.15)
+            }
+            .keyboardShortcut("[", modifiers: [])
+        }
+
+        CommandMenu("Beach") {
+            Button("Pause") {
+                NotificationCenter.default.post(name: .skTogglePause, object: nil)
+            }
+            .keyboardShortcut(.space, modifiers: [])
+            Button("Reset the beach") {
+                NotificationCenter.default.post(name: .skResetBeach, object: nil)
+            }
+            .keyboardShortcut("r", modifiers: [.command, .shift])
+            Divider()
+            Button("Next look") {
+                NotificationCenter.default.post(name: .skCycleLook, object: 1)
+            }
+            .keyboardShortcut("l", modifiers: [.command])
+            Button("Previous look") {
+                NotificationCenter.default.post(name: .skCycleLook, object: -1)
+            }
+            .keyboardShortcut("l", modifiers: [.command, .shift])
+        }
+
+        CommandGroup(after: .toolbar) {
+            Button("Field Notes") {
+                NotificationCenter.default.post(name: .skShowFieldNotes, object: nil)
+            }
+            .keyboardShortcut("/", modifiers: [.command])
+        }
+    }
+}
+
+#endif
+
+// MARK: - Command routing
+//
+// NotificationCenter rather than a shared observable object, because menu
+// commands are built once at app scope and would otherwise have to reach into a
+// model that does not exist yet at that point in the scene graph.
+
+extension Notification.Name {
+    static let skSelectTool = Notification.Name("sk.selectTool")
+    static let skAdjustBrush = Notification.Name("sk.adjustBrush")
+    static let skTogglePause = Notification.Name("sk.togglePause")
+    static let skResetBeach = Notification.Name("sk.resetBeach")
+    static let skCycleLook = Notification.Name("sk.cycleLook")
+    static let skShowFieldNotes = Notification.Name("sk.showFieldNotes")
+    static let skUndo = Notification.Name("sk.undo")
+    static let skRedo = Notification.Name("sk.redo")
+}
