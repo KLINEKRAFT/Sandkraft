@@ -51,13 +51,24 @@ struct MeterBar: View {
     var height: CGFloat = 6
     var track: Double = 0.16
 
+    /// Explicit CGFloat throughout. The implicit CGFloat/Double bridge would
+    /// compile this inline, but every such site adds real work to type inference
+    /// — and one of them has already cost a build.
+    private func filledWidth(in available: CGFloat) -> CGFloat {
+        let fraction = CGFloat(min(max(value, 0), 1))
+        let filled = available * fraction
+        // A capsule narrower than it is tall renders as a sliver; below the
+        // threshold show nothing at all rather than a stub.
+        return value > 0.001 ? max(filled, height) : 0
+    }
+
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(Palette.primaryText.opacity(track))
                 Capsule()
                     .fill(tint)
-                    .frame(width: max(geo.size.width * min(max(value, 0), 1), value > 0.001 ? height : 0))
+                    .frame(width: filledWidth(in: geo.size.width))
             }
         }
         .frame(height: height)
@@ -111,7 +122,7 @@ struct MoistureReadout: View {
                 Circle()
                     .strokeBorder(Palette.primaryText.opacity(0.14), lineWidth: 3)
                 Circle()
-                    .trim(from: 0, to: valid ? moisture : 0)
+                    .trim(from: 0, to: CGFloat(valid ? moisture : 0))
                     .stroke(Palette.moisture(moisture),
                             style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .rotationEffect(.degrees(-90))
@@ -160,7 +171,7 @@ struct TideClock: View {
             ZStack {
                 Circle().strokeBorder(Palette.primaryText.opacity(0.12), lineWidth: 4)
                 Circle()
-                    .trim(from: 0, to: 1 - min(max(progress, 0), 1))
+                    .trim(from: 0, to: CGFloat(1 - min(max(progress, 0), 1)))
                     .stroke(tint, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 0.25), value: progress)
