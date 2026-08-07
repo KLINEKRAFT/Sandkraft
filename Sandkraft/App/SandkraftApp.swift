@@ -32,18 +32,32 @@ struct SandkraftApp: App {
 /// item here is something a keyboard-first player will reach for.
 struct SandkraftCommands: Commands {
     var body: some Commands {
+        // ⌘S keeps the beach in the game under a name, with no panel and no
+        // question asked. ⇧⌘S is the file panel, which is where it belongs: a
+        // file is for getting a castle off this machine, and that is a rarer
+        // and more deliberate thing than saving.
         CommandGroup(replacing: .newItem) {
-            Button("Open a Beach…") {
-                NotificationCenter.default.post(name: .skOpenBeach, object: nil)
+            Button("Beaches…") {
+                NotificationCenter.default.post(name: .skShowBeaches, object: nil)
             }
             .keyboardShortcut("o", modifiers: [.command])
+
+            Button("Import from a File…") {
+                NotificationCenter.default.post(name: .skOpenBeach, object: nil)
+            }
+            .keyboardShortcut("o", modifiers: [.command, .option])
         }
 
         CommandGroup(replacing: .saveItem) {
-            Button("Save This Beach…") {
-                NotificationCenter.default.post(name: .skSaveBeach, object: nil)
+            Button("Keep This Beach") {
+                NotificationCenter.default.post(name: .skKeepBeach, object: nil)
             }
             .keyboardShortcut("s", modifiers: [.command])
+
+            Button("Export to a File…") {
+                NotificationCenter.default.post(name: .skSaveBeach, object: nil)
+            }
+            .keyboardShortcut("s", modifiers: [.command, .shift])
         }
 
         // Undo and redo were routed but never bound. `CommandRouting` has
@@ -177,6 +191,8 @@ extension Notification.Name {
     static let skSetBrushShape = Notification.Name("sk.setBrushShape")
     static let skTakePhoto = Notification.Name("sk.takePhoto")
     static let skSaveBeach = Notification.Name("sk.saveBeach")
+    static let skKeepBeach = Notification.Name("sk.keepBeach")
+    static let skShowBeaches = Notification.Name("sk.showBeaches")
     static let skOpenBeach = Notification.Name("sk.openBeach")
     static let skTogglePause = Notification.Name("sk.togglePause")
     static let skToggleChrome = Notification.Name("sk.toggleChrome")

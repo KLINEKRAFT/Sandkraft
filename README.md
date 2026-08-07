@@ -65,6 +65,9 @@ Set your own team in Signing & Capabilities before running on a device.
 | Undo / redo | the buttons | ⌘Z / ⇧⌘Z |
 | Pause | the button | space |
 | Hide the controls | the ⛶ button | ⇧⌘H |
+| Straight lines | Settings, or a hardware ⇧ | hold ⇧ while dragging, or ⌘\ |
+| Snap to a grid | Settings | ⌘' |
+| Keep this beach | the ⛫ button | ⌘S |
 
 There is no pan gesture on the phone, and that is deliberate: **the camera
 orbits the last place you touched the sand.** Work somewhere new and the pivot
@@ -101,13 +104,22 @@ resolution, which is chosen per quality tier to hold the cell where it is.
 
 ### Your work is kept
 
-The beach in front of you is written to an autosave slot every half minute that
-something has changed on it, and offered back as **Continue** the next time you
-launch. It is one slot and it is always the last beach — a way not to lose an
-afternoon, not a way to keep several. For that, ⌘S writes a `.sandkraft` file
-wherever you like, and ⌘O opens one.
+Three layers of it, and they answer three different questions.
 
-A saved beach only reopens at the quality it was saved at: the sand field is a
+**Continue** — the beach in front of you is written to an autosave slot every
+half minute that something has changed on it, and offered back the next time you
+launch. One slot, always the last beach. This is *don't lose my afternoon*.
+
+**The shelf** — ⌘S keeps the beach in the game under a name, with no panel and
+no question asked; ⌘O opens the shelf, where you can name, rename, open and
+delete them. This is *keep this one*. They live in Application Support, not in a
+folder you have to find again — though the filenames are the names you typed, so
+Finder works fine if you want it.
+
+**Files** — ⇧⌘S exports a `.sandkraft` file wherever you like, ⌥⌘O imports one.
+This is *give it to somebody else*.
+
+A kept beach only reopens at the quality it was kept at: the sand field is a
 different size at every tier, and resampling one is not something to do quietly
 to somebody's castle.
 

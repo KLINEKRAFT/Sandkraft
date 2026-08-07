@@ -116,11 +116,20 @@ final class SandkraftRenderView: MTKView {
 
     @objc private func handleDraw(_ g: UIPanGestureRecognizer) {
         guard let coordinator else { return }
+        // An iPad with a keyboard attached gets the same shift-to-straighten as
+        // a Mac, for free — `modifierFlags` is on the recogniser itself. On a
+        // bare touchscreen it is always empty, which is correct: there is no key
+        // to hold, and the switch in Settings is the way in.
+        coordinator.setStraightOverride(g.modifierFlags.contains(.shift))
         switch g.state {
         case .began:     coordinator.pointerDown(at: point(g))
         case .changed:   coordinator.pointerMoved(to: point(g))
-        case .ended:     coordinator.pointerUp()
-        case .cancelled, .failed: coordinator.pointerCancelled()
+        case .ended:
+            coordinator.pointerUp()
+            coordinator.setStraightOverride(false)
+        case .cancelled, .failed:
+            coordinator.pointerCancelled()
+            coordinator.setStraightOverride(false)
         default: break
         }
     }
@@ -237,6 +246,7 @@ final class SandkraftRenderView: MTKView {
         if event.modifierFlags.contains(.option) {
             orbiting = true
         } else {
+            coordinator?.setStraightOverride(event.modifierFlags.contains(.shift))
             coordinator?.pointerDown(at: point(event))
         }
     }
@@ -245,8 +255,23 @@ final class SandkraftRenderView: MTKView {
         if orbiting {
             coordinator?.orbit(dx: Float(event.deltaX), dy: Float(event.deltaY))
         } else {
+            // Read every drag rather than only at mouse-down, so shift can be
+            // taken or let go part-way through a stroke and the rest of the line
+            // obeys it. Straightening is anchored to where the stroke *started*,
+            // so grabbing shift half-way through a wobble still gives a straight
+            // wall — from the beginning, not from where you grabbed it.
+            coordinator?.setStraightOverride(event.modifierFlags.contains(.shift))
             coordinator?.pointerMoved(to: point(event))
         }
+    }
+
+    /// Shift pressed or released without the mouse moving.
+    ///
+    /// Without this, holding a button still and taking shift would do nothing
+    /// until the next pixel of movement — which reads as the key not working.
+    override func flagsChanged(with event: NSEvent) {
+        coordinator?.setStraightOverride(event.modifierFlags.contains(.shift))
+        super.flagsChanged(with: event)
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -256,6 +281,10 @@ final class SandkraftRenderView: MTKView {
         } else {
             coordinator?.pointerUp()
         }
+        // Dropped at the end of the stroke rather than left set. The override is
+        // a modifier, not a mode, and a mode you cannot see that outlives the
+        // gesture that set it is the worst kind.
+        coordinator?.setStraightOverride(false)
     }
 
     override func mouseMoved(with event: NSEvent) {

@@ -304,6 +304,13 @@ struct PlayView: View {
 
     private func settingsObservers<V: View>(_ content: V) -> some View {
         content
+        // The library asking to be got out of the way, having just put a beach
+        // on screen behind itself.
+        .onChange(of: model.dismissSheetsWanted) { _, wants in
+            guard wants else { return }
+            model.dismissSheetsWanted = false
+            sheet = nil
+        }
         .onChange(of: model.beachMessage != nil) { _, hasMessage in
             guard hasMessage, let message = model.beachMessage else { return }
             showHint(message)
@@ -591,37 +598,52 @@ struct QuickControls: View {
             ? AnyLayout(VStackLayout(spacing: Metric.s))
             : AnyLayout(HStackLayout(spacing: Metric.s))
 
+        // Grouped in threes rather than listed flat. `ViewBuilder` takes at
+        // most ten children and this row had reached exactly ten, which is not
+        // a limit to sit on: the eleventh control is a compile error in a file
+        // that has already run out of type-checker budget once. Three `Group`s
+        // are three children, and there is room again.
         layout {
-            IconButton(glyph: .undo, label: "Undo", enabled: model.canUndo) {
-                coordinator.undo()
-            }
-            IconButton(glyph: .redo, label: "Redo", enabled: model.canRedo) {
-                coordinator.redo()
-            }
-            IconButton(glyph: .camera, label: "Photograph") { model.takePhoto() }
-            IconButton(glyph: .layers, label: "Look") { sheet = .look }
-
-            // Only during a tide, because outside one there is nothing in the
-            // panel to hide.
-            if model.phase.isTimed {
-                IconButton(glyph: .tide,
-                           label: showObjectives ? "Hide the objectives" : "Show the objectives") {
-                    showObjectives.toggle()
+            Group {
+                IconButton(glyph: .undo, label: "Undo", enabled: model.canUndo) {
+                    coordinator.undo()
                 }
-                .opacity(showObjectives ? 1 : 0.55)
+                IconButton(glyph: .redo, label: "Redo", enabled: model.canRedo) {
+                    coordinator.redo()
+                }
+                IconButton(glyph: .camera, label: "Photograph") { model.takePhoto() }
             }
 
-            IconButton(glyph: model.isPaused ? .play : .pause,
-                       label: model.isPaused ? "Resume" : "Pause") {
-                model.isPaused.toggle()
+            Group {
+                IconButton(glyph: .layers, label: "Look") { sheet = .look }
+                // There is no menu bar on a phone, so the shelf needs a door on
+                // screen or it does not exist there.
+                IconButton(glyph: .beaches, label: "Beaches") { sheet = .beaches }
+
+                // Only during a tide, because outside one there is nothing in
+                // the panel to hide.
+                if model.phase.isTimed {
+                    IconButton(glyph: .tide,
+                               label: showObjectives ? "Hide the objectives" : "Show the objectives") {
+                        showObjectives.toggle()
+                    }
+                    .opacity(showObjectives ? 1 : 0.55)
+                }
             }
-            IconButton(glyph: .expand, label: "Hide the controls") { chromeHidden = true }
-            IconButton(glyph: .settings, label: "Settings") { sheet = .settings }
-            // `skReturnToTitle` has been in the environment since the first
-            // build and nothing ever read it, so there was no way back to the
-            // title at all. Leaving is non-destructive — the beach stays exactly
-            // as it is behind the title, and Resume comes back to it.
-            IconButton(glyph: .close, label: "Title screen") { returnToTitle() }
+
+            Group {
+                IconButton(glyph: model.isPaused ? .play : .pause,
+                           label: model.isPaused ? "Resume" : "Pause") {
+                    model.isPaused.toggle()
+                }
+                IconButton(glyph: .expand, label: "Hide the controls") { chromeHidden = true }
+                IconButton(glyph: .settings, label: "Settings") { sheet = .settings }
+                // `skReturnToTitle` has been in the environment since the first
+                // build and nothing ever read it, so there was no way back to
+                // the title at all. Leaving is non-destructive — the beach stays
+                // exactly as it is behind the title, and Resume comes back to it.
+                IconButton(glyph: .close, label: "Title screen") { returnToTitle() }
+            }
         }
     }
 }
