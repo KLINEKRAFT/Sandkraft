@@ -56,7 +56,7 @@ struct StoredPreferences: Equatable, Sendable {
     var invertZoom: Bool = false
 
     /// How big the sea is, over everything the tide already asks for.
-    var surf: Double = 0.75
+    var surf: Double = 0.85
 
     var campaignProgress: Int = 1
 }

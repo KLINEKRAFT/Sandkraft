@@ -335,7 +335,7 @@ final class GameModel {
     /// header, so this thins the surf that *erodes* by exactly as much as the
     /// surf you can see — turning it down makes a calmer beach, not a beach
     /// that lies about what the water is doing to it.
-    var surf: Double = 0.75
+    var surf: Double = 0.85
 
     // MARK: Photographs
     //

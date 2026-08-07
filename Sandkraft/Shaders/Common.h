@@ -504,6 +504,42 @@ inline float sk_seaLevelAt(float base, float t) {
          + 0.028f * sin(t * 1.0700f + 0.41f);
 }
 
+// How steep the whole sum is allowed to get.
+//
+// A Gerstner surface stays single-valued — that is, stays a surface — only
+// while its total steepness stays under one. At 0.80 it does not fold, but it
+// is close enough to the limit that every crest cusps: near-vertical faces, a
+// sharp point on top instead of a rounded one, and the horizontal orbital term
+// large enough that the mesh visibly shears against itself as a wave stands up.
+// That is what "the shore crashing on the beach looks a little crazy" is, and
+// no amount of turning the amplitude down fixes it, because it is a property of
+// the *shape* and not of the size: scaling `amp` scales `A` and `stSum`
+// together, the budget divides it straight back out, and the crest cusps just
+// as hard at half the height.
+//
+// 0.58 is a swell with round shoulders that still peaks up and breaks when the
+// bottom comes to meet it.
+constant float SK_STEEPNESS_BUDGET = 0.58f;
+
+/// Breaking height as a fraction of still-water depth.
+///
+/// Real waves break when their *height* — crest to trough — reaches about 0.78
+/// of the depth, which is an amplitude of about 0.39. This is that number,
+/// which the previous 0.46 overshot by nearly a fifth: the wave was allowed to
+/// stand a head taller than water that deep can hold it before anything clipped
+/// it, and the extra all went into the face.
+///
+/// **Used twice** — once in the steepness pre-pass and once in the sum — and the
+/// two absolutely have to agree. They were two copies of `0.46f` in two loops
+/// twenty lines apart, which is a disagreement waiting to be introduced by
+/// somebody tuning one of them at midnight. Budget the wrong height and the
+/// surface is either needlessly flat or quietly over the folding limit.
+constant float SK_BREAKER_DEPTH_RATIO = 0.40f;
+
+/// Orbital steepness per unit of amplitude × wavenumber. Also used twice, for
+/// the same reason, and with the same consequence for disagreeing.
+constant float SK_ORBITAL_STEEPNESS = 2.6f;
+
 /// Gerstner sum with shoaling, refraction and depth-limited breaking.
 ///   d   still-water depth in metres, clamped ≥ 0
 ///   amp global swell scale for this tide
@@ -512,23 +548,23 @@ inline float4 sk_gerstner(float2 p, float t, float d, float amp, int waveCount) 
     float3 disp = float3(0.0f);
     float brk = 0.0f, wsum = 0.0f;
 
-    // First: how steep does this sum *want* to be? A Gerstner surface stays
-    // single-valued only while its total steepness stays under one. Budget the
-    // whole sum rather than each component — five waves each allowed 0.92 add
-    // up to 4.6, and on the late tides, where the swell is biggest and
-    // refraction has turned every component to face the beach so they add
-    // rather than cancel, it really does go over. That is what folded,
-    // flickering, overlapping crests on a rising tide actually are.
+    // First: how steep does this sum *want* to be? Budget the whole sum rather
+    // than each component — five waves each allowed 0.92 add up to 4.6, and on
+    // the late tides, where the swell is biggest and refraction has turned every
+    // component to face the beach so they add rather than cancel, it really does
+    // go over. That is what folded, flickering, overlapping crests on a rising
+    // tide actually are.
     float stSum = 0.0f;
     for (int i = 0; i < 5; ++i) {
         if (i >= waveCount) { break; }
         float4 Wq = sk_waveParam(i);
         float kq  = SK_TAU / Wq.z;
         float thq = tanh(clamp(kq * max(d, 0.015f), 0.02f, 10.0f));
-        float Aq  = min(Wq.w * amp / sqrt(max(thq, 0.055f)), 0.46f * max(d, 0.02f));
-        stSum += min(0.92f, Aq * kq * 2.6f);
+        float Aq  = min(Wq.w * amp / sqrt(max(thq, 0.055f)),
+                        SK_BREAKER_DEPTH_RATIO * max(d, 0.02f));
+        stSum += min(0.92f, Aq * kq * SK_ORBITAL_STEEPNESS);
     }
-    float budget = min(1.0f, 0.80f / max(stSum, 1e-4f));
+    float budget = min(1.0f, SK_STEEPNESS_BUDGET / max(stSum, 1e-4f));
 
     for (int i = 0; i < 5; ++i) {
         if (i >= waveCount) { break; }
@@ -547,7 +583,7 @@ inline float4 sk_gerstner(float2 p, float t, float d, float amp, int waveCount) 
         float th = tanh(kd);
         float c  = sqrt(9.81f / k * th);
         float A  = W.w * amp / sqrt(max(th, 0.055f));
-        float Ab = 0.46f * max(d, 0.02f);              // depth-limited breaking height
+        float Ab = SK_BREAKER_DEPTH_RATIO * max(d, 0.02f);   // depth-limited height
         float over = max(A - Ab, 0.0f);
         brk  += (over / max(A, 1e-4f)) * W.w;
         wsum += W.w;
@@ -562,13 +598,25 @@ inline float4 sk_gerstner(float2 p, float t, float d, float amp, int waveCount) 
         // instead of a waterline. Orbital motion belongs to deep water anyway:
         // it collapses as the bottom comes up. Hold it off until there is real
         // water under the wave, and never let it exceed the depth it moves in.
-        float Q = min(0.92f, A * k * 2.6f) * budget;
+        float Q = min(0.92f, A * k * SK_ORBITAL_STEEPNESS) * budget;
         float horiz = min(min(Q / k, A * 2.2f), d * 0.45f) * smoothstep(0.06f, 1.10f, d);
         disp.xz -= dir * horiz * sin(ph);
         disp.y  += A * cos(ph);
     }
 
-    return float4(disp, clamp(brk / max(wsum, 1e-4f) * 1.35f, 0.0f, 1.0f));
+    // Breaking intensity, which drives both the foam in the water shader and the
+    // erosion in the solver.
+    //
+    // The gain came down from 1.35 with the breaker ratio, and it had to: those
+    // two changes push opposite ways. A *lower* breaking height means more of
+    // the swell is over it, so `over / A` is larger for the same wave — at half
+    // a metre of amplitude in a metre of water it roughly doubles. Left at 1.35
+    // the sea would have come out of this calmer in profile and whiter than
+    // before, which is not what "a little crazy" was asking for.
+    //
+    // Slightly under-compensated on purpose, so the net is less whitewater than
+    // there was, not the same amount arrived at by a different route.
+    return float4(disp, clamp(brk / max(wsum, 1e-4f) * 0.85f, 0.0f, 1.0f));
 }
 
 /// Cheap vertical-only query for the simulation. Three components is plenty
