@@ -117,18 +117,29 @@ enum BeachLibrary {
 
     // MARK: - Writing
 
-    /// Write a document under `name`, without ever overwriting one that is
-    /// already there. Returns the name it actually used.
+    /// Write a document under `name`. Returns the name it actually used.
+    ///
+    /// With `overwrite` false — the default, and what "keep a copy" means — a
+    /// name already on the shelf counts up rather than replacing anything, so
+    /// nothing is ever lost to a reflex.
+    ///
+    /// With `overwrite` true, the named beach is replaced in place. That is only
+    /// ever reached from ⌘S on a beach this session already owns, or from **Save
+    /// over this** on a row somebody deliberately pointed at.
     ///
     /// Called off the main actor, from the command buffer's completion handler.
     @discardableResult
-    static func write(_ data: Data, name: String) -> String? {
+    static func write(_ data: Data, name: String, overwrite: Bool = false) -> String? {
         guard let folder else { return nil }
-        let unique = uniqueName(from: name)
-        let url = folder.appendingPathComponent(unique).appendingPathExtension(fileExtension)
+        let resolved = overwrite ? sanitised(name) : uniqueName(from: name)
+        guard !resolved.isEmpty else { return nil }
+        let url = folder.appendingPathComponent(resolved).appendingPathExtension(fileExtension)
         do {
+            // Atomic either way. Replacing a save is the one moment the old one
+            // is most worth not losing: a non-atomic overwrite that dies halfway
+            // leaves neither the new beach nor the old one.
             try data.write(to: url, options: [.atomic])
-            return unique
+            return resolved
         } catch {
             return nil
         }

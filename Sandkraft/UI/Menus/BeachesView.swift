@@ -31,6 +31,7 @@ struct BeachesView: View {
     @State private var renaming: SavedBeach?
     @State private var renameTo: String = ""
     @State private var confirmingDelete: SavedBeach?
+    @State private var confirmingOverwrite: SavedBeach?
 
     private var currentResolution: Int { model.qualityTier.simResolution }
 
@@ -57,6 +58,14 @@ struct BeachesView: View {
         } message: {
             Text("The sand in it goes with it. This cannot be undone.")
         }
+        .confirmationDialog("Save over this beach?",
+                            isPresented: overwritingBinding,
+                            titleVisibility: .visible) {
+            Button("Save over it", role: .destructive) { commitOverwrite() }
+            Button("Cancel", role: .cancel) { confirmingOverwrite = nil }
+        } message: {
+            Text("What is kept under that name now is replaced by the beach on screen.")
+        }
     }
 
     // MARK: - Sections
@@ -69,7 +78,7 @@ struct BeachesView: View {
                 .autocorrectionDisabled()
                 #endif
 
-            Button("Keep it") {
+            Button("Keep it as a new beach") {
                 model.saveBeachToLibrary(named: newName)
                 newName = ""
                 // The write happens on the next frame, on the render thread, so
@@ -80,7 +89,12 @@ struct BeachesView: View {
             Text("""
                  Kept inside the game, not in a folder you have to find again. \
                  Leave the name empty and it takes today's date. Two beaches \
-                 with the same name is fine — the second becomes “2”.
+                 with the same name is fine — the second becomes “2”, because \
+                 nothing here is ever lost to a reflex.
+
+                 ⌘S is the reflex, and it saves *over* whichever beach you are \
+                 working on rather than breeding timestamps. This button is for \
+                 when you want a copy on purpose.
                  """)
                 .font(.skCaption)
                 .foregroundStyle(Palette.secondaryText)
@@ -102,7 +116,9 @@ struct BeachesView: View {
                 ForEach(beaches) { beach in
                     BeachRow(beach: beach,
                              loadable: beach.loadable(into: currentResolution),
+                             isCurrent: beach.name == model.currentBeachName,
                              open: { open(beach) },
+                             saveOver: { confirmingOverwrite = beach },
                              rename: { beginRename(beach) },
                              delete: { confirmingDelete = beach })
                 }
@@ -145,6 +161,8 @@ struct BeachesView: View {
             return
         }
         model.pendingBeachLoad = data
+        // From here on this is the beach ⌘S saves over.
+        model.noteCurrentBeach(beach.name)
         // Get out of the way of the thing that is about to appear. Loading a
         // beach and then being left staring at a list of beaches is the sort of
         // small rudeness that makes an interface feel unfinished.
@@ -163,6 +181,13 @@ struct BeachesView: View {
             model.beachMessage = "There is already a beach called that."
         }
         refresh()
+    }
+
+    private func commitOverwrite() {
+        guard let beach = confirmingOverwrite else { return }
+        confirmingOverwrite = nil
+        model.saveBeachToLibrary(named: beach.name, overwrite: true)
+        model.dismissSheetsWanted = true
     }
 
     private func commitDelete() {
@@ -188,6 +213,11 @@ struct BeachesView: View {
         Binding(get: { confirmingDelete != nil },
                 set: { if !$0 { confirmingDelete = nil } })
     }
+
+    private var overwritingBinding: Binding<Bool> {
+        Binding(get: { confirmingOverwrite != nil },
+                set: { if !$0 { confirmingOverwrite = nil } })
+    }
 }
 
 /// One beach on the shelf.
@@ -199,7 +229,11 @@ struct BeachesView: View {
 struct BeachRow: View {
     let beach: SavedBeach
     let loadable: Bool
+    /// The one ⌘S is currently aimed at. Marked, because "save over" is a lot
+    /// less alarming when you can see which row it means.
+    let isCurrent: Bool
     let open: () -> Void
+    let saveOver: () -> Void
     let rename: () -> Void
     let delete: () -> Void
 
@@ -207,10 +241,17 @@ struct BeachRow: View {
         HStack(spacing: Metric.m) {
             Button(action: open) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(beach.name)
-                        .font(Typeface.font(13, .medium))
-                        .foregroundStyle(loadable ? Palette.primaryText
-                                                  : Palette.secondaryText)
+                    HStack(spacing: Metric.s) {
+                        Text(beach.name)
+                            .font(Typeface.font(13, .medium))
+                            .foregroundStyle(loadable ? Palette.primaryText
+                                                      : Palette.secondaryText)
+                        if isCurrent {
+                            Text("⌘S")
+                                .font(Typeface.font(10, .semibold))
+                                .foregroundStyle(Palette.accent)
+                        }
+                    }
                     Text(caption)
                         .font(.skCaption)
                         .foregroundStyle(Palette.secondaryText)
@@ -223,6 +264,7 @@ struct BeachRow: View {
 
             Menu {
                 Button("Open", action: open).disabled(!loadable)
+                Button("Save over this…", action: saveOver)
                 Button("Rename…", action: rename)
                 Button("Delete", role: .destructive, action: delete)
             } label: {

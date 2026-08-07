@@ -277,15 +277,24 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            daySection
-            feelSection
-            performanceSection
-            draftingSection
-            seaSection
-            cameraSection
-            beachSection
-            storedSection
-            aboutSection
+            // Two `Group`s rather than ten bare sections. `ViewBuilder` takes at
+            // most ten children and this reached exactly ten the moment Controls
+            // was added — which is a compile error waiting for the eleventh
+            // idea, not a limit to sit on.
+            Group {
+                daySection
+                feelSection
+                controlsSection
+                performanceSection
+                draftingSection
+            }
+            Group {
+                seaSection
+                cameraSection
+                beachSection
+                storedSection
+                aboutSection
+            }
         }
         .confirmationDialog("Reset settings and progress?",
                             isPresented: $confirmingReset,
@@ -360,6 +369,27 @@ struct SettingsView: View {
                 LabeledContent("Packed", value: String(format: "%.1f m³", model.metrics.packedVolume))
                 LabeledContent("Wetted", value: String(format: "%.0f m²", model.metrics.wettedArea))
             }
+        }
+    }
+
+    /// Every button and key, in the place people look for them.
+    ///
+    /// The same list has been in Field Notes since the first build, which is a
+    /// perfectly good place for it and completely the wrong *only* place: Field
+    /// Notes reads as lore, and nobody hunting for "how do I orbit" opens the
+    /// essay about capillary bridges. It is one view, shown from both.
+    private var controlsSection: some View {
+        Section("Controls") {
+            NavigationLink("Every button and key") {
+                ControlsReference()
+                    .navigationTitle("Controls")
+            }
+            Text("""
+                 The full list — pointer, touch, and every keyboard shortcut. \
+                 Also in Field Notes, which is where it used to hide.
+                 """)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
         }
     }
 
@@ -652,8 +682,9 @@ struct ControlsReference: View {
         ]))
 
         all.append(Block(title: "The beach", rows: [
-            Row(keys: "⌘S", what: "Keep this beach, in the game, no panel"),
+            Row(keys: "⌘S", what: "Keep this beach — saves over it after the first time"),
             Row(keys: "⌘O", what: "The shelf of kept beaches"),
+            Row(keys: "⌘0", what: "Centre the beach"),
             Row(keys: "⇧⌘S", what: "Export this beach to a file"),
             Row(keys: "⌥⌘O", what: "Import a beach from a file"),
             Row(keys: "⇧⌘P", what: "Photograph the frame as it stands"),

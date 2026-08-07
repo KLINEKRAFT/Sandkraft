@@ -208,12 +208,19 @@ extension Tool {
 
         Tool(id: .mould, name: "Mould", mode: .mould, family: .material, ledger: .gives,
              radius: 1.00, strength: 1.00, unlockTide: 1,
-             summary: "Hold to fill, release to turn out.",
+             summary: "Hold to grow it taller, release to turn out.",
              detail: """
-             Press and hold on damp sand to scoop the mould full, then aim and \
-             release to turn it out. What comes out is exactly as wet as what went \
-             in — a mould is a promise between you and the water in the sand, and \
-             the sand will show you precisely what it thinks of a broken one.
+             Press and hold on damp sand and the shape grows — the longer you \
+             hold, the taller it stands. Release to turn it out.
+
+             The mould does not dig. It leaves the ground it is standing on \
+             exactly as it found it, and the sand it adds comes out of your \
+             pail — so on a tide, a turret is something you have to have dug \
+             for first. On the open shore it is free.
+
+             What comes out is exactly as wet as what it was pressed into — a \
+             mould is a promise between you and the water in the sand, and the \
+             sand will show you precisely what it thinks of a broken one.
              """,
              shortcut: "4"),
 
