@@ -65,6 +65,7 @@ kernel void particle_update(device SKParticle *particles       [[buffer(0)]],
                             device atomic_uint *deposit        [[buffer(1)]],
                             constant SKParticleUniforms &u     [[buffer(2)]],
                             texture2d<float> sandTex           [[texture(0)]],
+                            texture2d<float> bedrockLUT        [[texture(1)]],
                             uint tid [[thread_position_in_grid]]) {
     if (tid >= u.capacity) { return; }
 
@@ -96,7 +97,7 @@ kernel void particle_update(device SKParticle *particles       [[buffer(0)]],
 
     pos += vel * u.dt;
 
-    float ground = sk_groundYSmooth(sandTex, pos.xz, u.domain, u.simResolution, u.texel);
+    float ground = sk_groundYSmooth(sandTex, bedrockLUT, pos.xz, u.domain, u.simResolution, u.texel);
     float seaLevel = sk_seaLevelAt(u.seaBase, u.time);
 
     bool landed = pos.y <= ground;

@@ -31,12 +31,13 @@ struct WaterVertexOut {
 vertex WaterVertexOut water_vertex(uint vid [[vertex_id]],
                                    constant SKFrameUniforms &frame     [[buffer(0)]],
                                    constant SKTerrainUniforms &terrain [[buffer(1)]],
-                                   texture2d<float> sandTex            [[texture(0)]]) {
+                                   texture2d<float> sandTex            [[texture(0)]],
+                                   texture2d<float> bedrockLUT         [[texture(1)]]) {
     float2 uv = sk_gridUV(vid, uint(terrain.gridEdge));
     float2 p = sk_skirtPosition(uv);
 
     float seaLevel = sk_seaLevelAt(frame.seaBase, frame.time);
-    float depth = max(sk_stillDepth(sandTex, p, seaLevel, frame.domain,
+    float depth = max(sk_stillDepth(sandTex, bedrockLUT, p, seaLevel, frame.domain,
                                     frame.simResolution, frame.texel), 0.0f);
 
     float4 g = sk_gerstner(p, frame.time, depth, frame.waveAmplitude, 5);
@@ -59,7 +60,8 @@ fragment float4 water_fragment(WaterVertexOut in [[stage_in]],
                                texture2d<float> sandTex            [[texture(0)]],
                                texture2d<float> skyLUT             [[texture(1)]],
                                texture2d<float> sceneColor         [[texture(2)]],
-                               depth2d<float>   shadowMap          [[texture(3)]]) {
+                               depth2d<float>   shadowMap          [[texture(3)]],
+                               texture2d<float> bedrockLUT         [[texture(4)]]) {
     constexpr sampler linearClamp(coord::normalized, filter::linear, address::clamp_to_edge);
 
     float seaLevel = sk_seaLevelAt(frame.seaBase, frame.time);
@@ -79,10 +81,10 @@ fragment float4 water_fragment(WaterVertexOut in [[stage_in]],
     // *undisplaced* frame. Far more stable than differencing the displaced vertex
     // positions, which fold over each other near a breaker.
     const float e = 0.22f;
-    float dl = max(sk_stillDepth(sandTex, p - float2(e, 0.0f), seaLevel, frame.domain, frame.simResolution, frame.texel), 0.0f);
-    float dr = max(sk_stillDepth(sandTex, p + float2(e, 0.0f), seaLevel, frame.domain, frame.simResolution, frame.texel), 0.0f);
-    float dd = max(sk_stillDepth(sandTex, p - float2(0.0f, e), seaLevel, frame.domain, frame.simResolution, frame.texel), 0.0f);
-    float du = max(sk_stillDepth(sandTex, p + float2(0.0f, e), seaLevel, frame.domain, frame.simResolution, frame.texel), 0.0f);
+    float dl = max(sk_stillDepth(sandTex, bedrockLUT, p - float2(e, 0.0f), seaLevel, frame.domain, frame.simResolution, frame.texel), 0.0f);
+    float dr = max(sk_stillDepth(sandTex, bedrockLUT, p + float2(e, 0.0f), seaLevel, frame.domain, frame.simResolution, frame.texel), 0.0f);
+    float dd = max(sk_stillDepth(sandTex, bedrockLUT, p - float2(0.0f, e), seaLevel, frame.domain, frame.simResolution, frame.texel), 0.0f);
+    float du = max(sk_stillDepth(sandTex, bedrockLUT, p + float2(0.0f, e), seaLevel, frame.domain, frame.simResolution, frame.texel), 0.0f);
 
     float hl = sk_gerstner(p - float2(e, 0.0f), frame.time, dl, frame.waveAmplitude, 5).y;
     float hr = sk_gerstner(p + float2(e, 0.0f), frame.time, dr, frame.waveAmplitude, 5).y;

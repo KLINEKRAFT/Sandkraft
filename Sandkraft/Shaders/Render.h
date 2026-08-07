@@ -104,20 +104,22 @@ inline float4 sk_sandSmooth(texture2d<float> sandTex, float2 uv, float res, floa
 /// Ground height using the shading-quality resample. Outside the simulated
 /// square this falls back to the analytic bed, which is what makes the skirt
 /// meet the domain without a seam.
-inline float sk_groundYSmooth(texture2d<float> sandTex, float2 p,
-                              float4 domain, float res, float2 texel) {
+inline float sk_groundYSmooth(texture2d<float> sandTex, texture2d<float> bedrockLUT,
+                              float2 p, float4 domain, float res, float2 texel) {
     float2 uv = (p - domain.xy) / domain.zw;
+    float2 bed = sk_bedrockPair(bedrockLUT, p);
     float s = (uv.x >= 0.0f && uv.x <= 1.0f && uv.y >= 0.0f && uv.y <= 1.0f)
             ? sk_sandSmooth(sandTex, uv, res, texel).r
-            : sk_sandBed(p);
-    return sk_bedrock(p) + s;
+            : bed.y;
+    return bed.x + s;
 }
 
 /// Still-water depth: how far below the mean surface the ground is here, before
 /// any wave displacement. Negative on dry land.
-inline float sk_stillDepth(texture2d<float> sandTex, float2 p, float seaLevel,
+inline float sk_stillDepth(texture2d<float> sandTex, texture2d<float> bedrockLUT,
+                           float2 p, float seaLevel,
                            float4 domain, float res, float2 texel) {
-    return seaLevel - sk_groundYSmooth(sandTex, p, domain, res, texel);
+    return seaLevel - sk_groundYSmooth(sandTex, bedrockLUT, p, domain, res, texel);
 }
 
 // MARK: - Sky

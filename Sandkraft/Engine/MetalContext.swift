@@ -175,7 +175,10 @@ enum QualityTier: Int, CaseIterable, Identifiable, Codable, Sendable {
         let fields = 2 + 1 + 1 + undoDepth                   // ping, pong, pristine, deposit, undo
         let shadow = shadowResolution * shadowResolution * 4
         let particles = particleCapacity * 48
-        return (field * fields + shadow + particles) / (1024 * 1024)
+        // The baked hardpack table. The same 8 MB at every tier — it describes
+        // the shore, which does not get bigger when the simulation does.
+        let bedrock = SandSimulation.bedrockResolution * SandSimulation.bedrockResolution * 8
+        return (field * fields + shadow + particles + bedrock) / (1024 * 1024)
     }
 }
 
