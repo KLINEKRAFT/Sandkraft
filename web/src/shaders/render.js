@@ -43,7 +43,7 @@ vec2 gridUV(int vid, int edge) {
 /// where the world ends. The exponent concentrates triangles near the player.
 vec2 skirtPosition(vec2 uv) {
     vec2 s = uv * 2.0 - 1.0;
-    return vec2(0.0, -4.0) + sign(s) * pow(abs(s), vec2(2.6)) * 150.0;
+    return vec2(0.0, -8.0) + sign(s) * pow(abs(s), vec2(2.6)) * 380.0;
 }
 `;
 

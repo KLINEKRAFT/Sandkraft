@@ -198,10 +198,136 @@ input[type=range]::-moz-range-thumb {
     background: var(--paper);
 }
 
-@media (max-width: 380px) {
-    button { min-width: 48px; height: 48px; }
-    button .label { display: none; }
-    input[type=range] { width: 96px; }
+/* Nine tools do not fit across a phone. Scrolling sideways keeps them all one
+   tap away and keeps the bar one row tall, which matters because every row of
+   furniture is a row of beach you cannot see. */
+.tools {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start;
+}
+.tools::-webkit-scrollbar { display: none; }
+.tools button { flex: 0 0 auto; }
+
+.chips {
+    display: flex;
+    gap: 6px;
+    padding: 6px;
+    background: var(--paper);
+    border: 3px solid var(--ink);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.chips::-webkit-scrollbar { display: none; }
+
+.chip {
+    min-width: 46px;
+    height: 44px;
+    border-radius: 12px;
+    flex: 0 0 auto;
+}
+.chip .glyph { font-size: 17px; }
+.chip .label { font-size: 9px; }
+
+.glyphonly { min-width: 40px; padding: 0 10px; }
+
+#menu {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
+    width: 46px;
+    height: 46px;
+    min-width: 0;
+    font-size: 20px;
+    border-radius: 14px;
+    background: var(--paper);
+    z-index: 5;
+}
+
+#toast {
+    position: fixed;
+    top: calc(66px + env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 16px;
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 700;
+    z-index: 6;
+    max-width: 84vw;
+    text-align: center;
+}
+
+#sheet {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(50, 37, 28, 0.35);
+    z-index: 7;
+    padding: 12px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+
+.sheetinner {
+    width: 100%;
+    max-width: 420px;
+    background: var(--paper);
+    border: 3px solid var(--ink);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.sheethead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 15px;
+}
+
+.slot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border: 2.5px solid var(--ink);
+    border-radius: 15px;
+    background: #FFFFFF;
+    font-size: 12px;
+    cursor: pointer;
+}
+.slot.on { background: var(--sea); }
+.slotname { font-weight: 700; white-space: nowrap; }
+.slotinfo { opacity: 0.7; flex: 1; text-align: right; font-size: 11px; }
+
+button.mini {
+    min-width: 0;
+    height: 34px;
+    padding: 0 12px;
+    font-size: 12px;
+    border-radius: 11px;
+    flex-direction: row;
+}
+button.mini:disabled { opacity: 0.4; cursor: default; }
+
+@media (max-width: 400px) {
+    button { min-width: 50px; height: 50px; }
+    .tools button .label { font-size: 9px; }
+    input[type=range] { width: 100px; }
 }
 </style>
 </head>
@@ -211,18 +337,57 @@ input[type=range]::-moz-range-thumb {
 
 <div id="hint">One finger digs · two fingers move the camera</div>
 
+<button id="menu" aria-label="Menu">☰</button>
+<div id="toast" hidden></div>
+
 <div id="ui" hidden>
-    <div class="sizer">
-        <span>Size</span>
-        <input id="size" type="range" min="0.8" max="5.5" step="0.1" value="2.2" aria-label="Brush size">
+    <!-- Contextual rows. Only the one the current tool uses is shown. -->
+    <div id="shapes" class="chips" hidden>
+        <button class="chip on" data-shape="tower"><span class="glyph">🗼</span><span class="label">Tower</span></button>
+        <button class="chip" data-shape="block"><span class="glyph">🧱</span><span class="label">Block</span></button>
+        <button class="chip" data-shape="cone"><span class="glyph">⛰️</span><span class="label">Cone</span></button>
     </div>
+    <div id="propbar" class="chips" hidden></div>
+
+    <div class="sizer">
+        <button id="footprint" class="mini glyphonly" title="Round or square footprint"><span class="glyph">⬤</span></button>
+        <input id="size" type="range" min="1.0" max="9.0" step="0.1" value="3.0" aria-label="Brush size">
+    </div>
+
+    <!-- Scrolls sideways rather than wrapping. Eight tools do not fit across a
+         phone, and a wrapped two-row bar eats the beach. -->
     <div class="tools">
         <button data-tool="dig" class="on"><span class="glyph">⛏</span><span class="label">Dig</span></button>
         <button data-tool="pour"><span class="glyph">🪣</span><span class="label">Pour</span></button>
+        <button data-tool="mould"><span class="glyph">🏰</span><span class="label">Mould</span></button>
+        <button data-tool="wall"><span class="glyph">🧱</span><span class="label">Wall</span></button>
+        <button data-tool="flatten"><span class="glyph">▭</span><span class="label">Flatten</span></button>
         <button data-tool="pack"><span class="glyph">✋</span><span class="label">Pack</span></button>
         <button data-tool="wet"><span class="glyph">💧</span><span class="label">Wet</span></button>
-        <button id="tide" class="on"><span class="glyph">🌊</span><span class="label">Tide</span></button>
-        <button id="reset"><span class="glyph">↺</span><span class="label">New</span></button>
+        <button data-tool="prop"><span class="glyph">🚩</span><span class="label">Place</span></button>
+        <button data-tool="erase"><span class="glyph">🧺</span><span class="label">Pick up</span></button>
+    </div>
+</div>
+
+<div id="sheet" hidden>
+    <div class="sheetinner">
+        <div class="sheethead">
+            <strong>Beach</strong>
+            <button id="closesheet" class="mini">Done</button>
+        </div>
+        <div id="slots"></div>
+        <div class="slot" id="tide">
+            <span class="slotname">🌊 Tide</span>
+            <span class="slotinfo">The sea works the shore</span>
+        </div>
+        <div class="slot" id="panmode">
+            <span class="slotname">✋ Two-finger pan</span>
+            <span class="slotinfo">Two fingers turn the beach</span>
+        </div>
+        <div class="slot" id="reset">
+            <span class="slotname">↺ New beach</span>
+            <span class="slotinfo">Starts over. Saved beaches are kept.</span>
+        </div>
     </div>
 </div>
 

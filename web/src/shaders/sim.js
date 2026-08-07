@@ -81,11 +81,82 @@ uniform float uSeaBase;
 uniform float uWaveAmp;
 uniform float uErosion;
 
-// Brush: xy = world position, z = radius, w = strength (0 when not drawing).
-uniform vec4  uBrush;
-uniform int   uTool;          // 0 none, 1 dig, 2 pour, 3 pack, 4 wet
+// The stroke, as a swept segment rather than a point.
+//
+// uBrushA: xy = where the stroke was last frame, z = radius, w = strength 0..1
+// uBrushB: xy = where it is now,  z = reference ground height, w = tool parameter
+//
+// Sweeping matters more than it sounds. A point brush stamped once per frame
+// leaves a dotted line the moment a finger moves faster than radius-per-frame,
+// and the faster you drag the more it looks like the tool is broken. Measuring
+// distance to the *segment* costs four extra instructions and the tool becomes
+// continuous at any speed.
+uniform vec4  uBrushA;
+uniform vec4  uBrushB;
+uniform int   uTool;          // 0 none · 1 dig · 2 pour · 3 pack · 4 wet
+                              // 5 wall · 6 flatten
+uniform int   uBrushShape;    // 0 round, 1 square
+
+// The mould, fired on exactly one substep.
+// uStamp:  xy = centre, z = radius, w = height
+// uStamp2: x = shape, y = rotation, z = armed 0/1, w = base surface height
+uniform vec4  uStamp;
+uniform vec4  uStamp2;
 
 out vec4 outColor;
+
+/// Distance to a swept segment, in L².
+float segDist(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    float t = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+    return length(pa - ba * t);
+}
+
+/// The same swept stroke measured in L∞ instead of L².
+///
+/// The isolines of max(|x|, |y|) are concentric squares, so this one metric
+/// switch turns a round spade into a square one without any tool having to know
+/// about it — every mode below is written against the falloff, not against the
+/// distance.
+float segDistSquare(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    float t = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+    vec2 q = abs(pa - ba * t);
+    return max(q.x, q.y);
+}
+
+/// How tall the mould stands above its base at this point, or -1 outside it.
+float mouldHeight(vec2 p, vec4 st, vec4 st2) {
+    vec2 d = p - st.xy;
+    float c = cos(st2.y), s = sin(st2.y);
+    d = vec2(c * d.x - s * d.y, s * d.x + c * d.y);
+
+    int shape = int(st2.x + 0.5);
+    float r = max(st.z, 0.05), h = st.w;
+
+    if (shape == 1) {
+        // A block. Square footprint, flat top, crisp sides — the shape you get
+        // from an upturned box rather than a bucket.
+        float q = max(abs(d.x), abs(d.y));
+        if (q > r) { return -1.0; }
+        return h * (1.0 - smoothstep(r * 0.93, r, q));
+    }
+    if (shape == 2) {
+        // A cone.
+        float q = length(d);
+        if (q > r) { return -1.0; }
+        return h * (1.0 - q / r);
+    }
+
+    // A tower: near-vertical sides with a raised rim, which is what a bucket
+    // actually turns out — the rim is the lip of the pail and it is the detail
+    // that makes the shape read as moulded rather than as a lump.
+    float q = length(d) / r;
+    if (q > 1.0) { return -1.0; }
+    float body = h * (1.0 - smoothstep(0.88, 1.0, q));
+    float rim  = h * 0.14 * smoothstep(0.60, 0.78, q) * (1.0 - smoothstep(0.78, 0.93, q));
+    return body + rim;
+}
 
 /// How hard the sea is working this cell, right now.
 float waveWork(vec2 wp, float groundHeight) {
@@ -198,26 +269,75 @@ void main() {
     c -= wa * uDt * 0.55;
 
     // ------------------------------------------------------------- the brush
-    if (uTool != 0 && uBrush.w > 0.0) {
-        float d = length(wp - uBrush.xy);
-        float w = 1.0 - smoothstep(uBrush.z * 0.35, uBrush.z, d);
-        w *= uBrush.w;
+    //
+    // Every rate below is metres (or units) per second at the centre of the
+    // stroke, and they are all far gentler than the first cut of this game.
+    // That version multiplied by twelve and a tap took a crater out of the
+    // beach; a sandcastle tool wants to feel like a hand, which means you
+    // should have to work at it for a second to move something noticeable.
+    if (uTool != 0 && uBrushA.w > 0.0) {
+        float d = (uBrushShape == 1)
+            ? segDistSquare(wp, uBrushA.xy, uBrushB.xy)
+            : segDist(wp, uBrushA.xy, uBrushB.xy);
+
+        float r = max(uBrushA.z, 0.05);
+        // A wide shoulder, not a cliff. The soft edge is most of what makes the
+        // tool feel like sand rather than like a cursor.
+        float w = 1.0 - smoothstep(r * 0.30, r, d);
+        w *= uBrushA.w;
 
         if (w > 0.0) {
+            float k = w * uDt;
+
             if (uTool == 1) {
                 // Dig. Cannot take what is not there — the hardpack is the floor.
-                h = max(h - w * 2.2 * uDt * 12.0, 0.0);
+                h = max(h - k * 0.90, 0.0);
+                m = min(m + k * 0.15, 1.0);       // turned-over sand is damper
             } else if (uTool == 2) {
                 // Pour, at the moisture of the pail.
-                float add = w * 1.8 * uDt * 12.0;
+                float add = k * 0.75;
                 float total = h + add;
                 if (total > 1e-6) { m = mix(m, 0.62, add / total); }
                 h = total;
             } else if (uTool == 3) {
                 // Pack, with the flat of a hand. This is what buys a vertical face.
-                c = min(c + w * 2.4 * uDt * 12.0, 1.0);
+                c = min(c + k * 1.10, 1.0);
             } else if (uTool == 4) {
-                m = min(m + w * 1.9 * uDt * 12.0, 1.0);
+                m = min(m + k * 0.95, 1.0);
+            } else if (uTool == 5) {
+                // Wall. Raises the surface toward a ridge of the requested
+                // height above where the stroke started, and packs as it goes —
+                // a rampart you drag out rather than one you pile up by hand.
+                float target = uBrushB.z + uBrushB.w;
+                float want = max(target - b0, 0.0);
+                if (want > h) { h = mix(h, want, clamp(k * 3.2, 0.0, 1.0)); }
+                m = min(m + k * 0.85, 1.0);
+                c = min(c + k * 1.30, 1.0);
+            } else if (uTool == 6) {
+                // Flatten toward the height the stroke started at. The one tool
+                // that is about taking away *and* adding, and the fastest way to
+                // get a clean base to build on.
+                float want = max(uBrushB.z - b0, 0.0);
+                h = mix(h, want, clamp(k * 2.2, 0.0, 1.0));
+            }
+        }
+    }
+
+    // -------------------------------------------------------------- the mould
+    //
+    // Fired on exactly one substep. Two would turn out two towers a millimetre
+    // apart, which reads as one very strange tower.
+    if (uStamp2.z > 0.5) {
+        float add = mouldHeight(wp, uStamp, uStamp2);
+        if (add >= 0.0) {
+            float want = max(uStamp2.w + add - b0, 0.0);
+            if (want > h) {
+                h = want;
+                // Damp and hard-packed, which is the whole point: the repose
+                // floor at this packing is past vertical, so the moulded face
+                // stands instead of slumping the instant it appears.
+                m = max(m, 0.60);
+                c = max(c, 0.88);
             }
         }
     }

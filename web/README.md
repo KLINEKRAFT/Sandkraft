@@ -1,7 +1,10 @@
 # Sandkraft — minimal web edition
 
-A cartoon-styled sandcastle sandbox that runs in a phone browser. Dig, pour,
-pack, wet, and watch the tide take it back.
+A cartoon-styled sandcastle sandbox that runs in a phone browser. Dig, mould,
+wall, flatten, pack, wet, decorate — and watch the tide take it back.
+
+96 m of beach, about three metres of loose sand over the working ground, nine
+tools, six props and three save slots.
 
 This is not a port of the app in `Sandkraft/`. It is a much smaller thing that
 shares the app's physics: the angle-of-repose curve, the eight-neighbour
@@ -46,17 +49,38 @@ one. It is still a web page: no App Store listing, no push, no haptics.
 
 **One finger works the sand, two fingers move the camera.** A sandbox where the
 first thing a finger does is spin the world is a sandbox nobody digs in. On a
-mouse: left-drag to work, right-drag or Shift-drag to orbit, wheel to zoom.
+mouse: left-drag to work, right-drag or Shift-drag to orbit, middle-drag or
+Ctrl-drag to pan, wheel to zoom. Two-finger pan is a toggle in the menu, because
+a phone has no modifier key to hold.
+
+## The tools
+
+| | |
+|---|---|
+| **Dig** | Takes sand away, down to the hardpack and no further |
+| **Pour** | Adds damp sand from the pail |
+| **Mould** | Turns out a tower, a block or a cone — packed hard, so it stands |
+| **Wall** | Drags out a packed rampart at one height |
+| **Flatten** | Levels toward wherever the stroke began |
+| **Pack** | The flat of a hand. This is what buys a vertical face |
+| **Wet** | Water. The other thing that buys a vertical face, until it is too much |
+| **Place** / **Pick up** | Flags, buckets, spades, shells, starfish, umbrellas |
+
+Every stroke is a *swept segment*, not a stamped point, so a fast drag is
+continuous rather than dotted. Strength eases in over about a fifth of a second,
+which is what stops a tap from gouging.
 
 ## How a frame is built
 
-1. **Bake the hardpack** — once, at startup, into an RG float table over ±40 m.
+1. **Bake the hardpack** — once, at startup, into an RG float table over ±72 m.
    `bedrock()` is several noise evaluations describing ground that never moves,
    and the solver would otherwise ask for it nine times per texel per step.
-2. **Step the solver** — three or four substeps of fragment-shader ping-pong
+2. **Step the solver** — two or three substeps of fragment-shader ping-pong
    between two float textures. WebGL2 has no compute shaders, so this is the
    original architecture rather than the app's Metal kernels.
-3. **Draw sky, beach, sea** into an offscreen colour + depth target.
+3. **Draw sky, beach, props, sea** into an offscreen colour + depth target.
+   The fine grid goes down before the skirt, so the skirt's fragments over the
+   playable square are depth-rejected instead of shaded twice.
 4. **Ink and composite** — silhouettes found in screen space from depth.
 
 There are no vertex buffers anywhere. Positions are decoded from `gl_VertexID`
@@ -101,14 +125,17 @@ Inherited from the app, and every edit to `shaders/sim.js` has to preserve both:
 Written down rather than left to be discovered:
 
 - **Picking marches the *pristine* shore, not the live field.** The ray
-  converges against the baked table — hardpack plus the bed the tide left — so a
-  tower you built yourself is not in the height it iterates against, and the
-  cursor drifts a little when you work on top of your own castle. Fixing it
-  properly needs a GPU pick or a per-frame readback of the sand field.
-- **Past ±40 m the beach falls back to evaluating the profile per pixel.** That
+  converges against the baked table — hardpack plus the bed the tide left — so
+  the cursor drifts a little when you work on top of your own castle. Moulds do
+  not have this problem: placing one costs a single-texel readback of the live
+  field, which is affordable once per tap and not once per frame.
+- **Past ±72 m the beach falls back to evaluating the profile per pixel.** That
   is most of the distant frame, and it is the largest remaining cost.
-- **No save, no score, no props, no particles.** The app has all four. This
-  does not.
+- **No score and no particles.** The native app has both. This does not.
+- **The frame-time watchdog only steps down.** If a device cannot hold 30 fps it
+  drops the pixel ratio once, then once more, and stays there. A watchdog that
+  also steps back up oscillates, and a picture that pulses between two
+  sharpnesses is worse than one that is simply softer.
 - The sea fills any depression below sea level whether or not it is connected to
   the water. On a real beach that is groundwater and looks right; in a deep
   moat cut inland it is a coincidence that happens to look right.

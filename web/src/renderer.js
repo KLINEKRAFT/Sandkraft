@@ -11,6 +11,7 @@ import {
     WATER_VS, WATER_FS,
     SKY_FS, COMPOSITE_FS,
 } from './shaders/render.js';
+import { PROP_VS, PROP_FS } from './shaders/props.js';
 
 const gridVertexCount = (edge) => (edge - 1) * (edge - 1) * 6;
 
@@ -23,6 +24,7 @@ export class Renderer {
         this.pTerrain = program(gl, TERRAIN_VS, TERRAIN_FS, 'terrain');
         this.pWater = program(gl, WATER_VS, WATER_FS, 'water');
         this.pComposite = program(gl, FULLSCREEN_VS, COMPOSITE_FS, 'composite');
+        this.pProps = program(gl, PROP_VS, PROP_FS, 'props');
 
         // WebGL2 refuses to draw without a bound vertex array, even when the
         // shaders read no attributes at all. One empty VAO for the whole app.
@@ -43,9 +45,10 @@ export class Renderer {
         this.scene = sceneTarget(gl, width, height);
     }
 
-    draw(sim, camera, env) {
+    draw(sim, camera, env, props) {
         const gl = this.gl;
         const { width, height } = this.scene;
+        const domainSpan = 96;
 
         gl.bindVertexArray(this.vao);
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.scene.fbo);
@@ -69,7 +72,7 @@ export class Renderer {
         gl.disable(gl.CULL_FACE);       // the sand is a sheet; both sides count
 
         const viewProj = camera.viewProj;
-        const cell = 48 / sim.resolution;
+        const cell = domainSpan / sim.resolution;
 
         // --- Beach. The skirt first, depth-biased back so its coarse triangles
         //     lose every argument with the fine ones at the border.
@@ -84,17 +87,44 @@ export class Renderer {
         bindTexture(gl, this.pTerrain, 'uField', 0, sim.front);
         bindTexture(gl, this.pTerrain, 'uBedrock', 1, sim.bedrock);
 
+        // Inner grid FIRST, skirt second — which is the opposite of the obvious
+        // order and roughly halves the fragment cost over the middle of the
+        // screen.
+        //
+        // The two overlap: the skirt is a full sheet and the fine grid sits
+        // inside it, so every pixel of the playable square used to be shaded
+        // twice. Drawing the fine grid first and then biasing the skirt *away*
+        // means the skirt's fragments over that square fail the depth test and
+        // are rejected before the fragment shader runs — and this shader is
+        // expensive, four ground samples per pixel to rebuild the normal. The
+        // picture is identical because the fine grid won those pixels anyway.
+        gl.uniform1i(t.uEdge, this.quality.terrainGrid);
+        gl.uniform1f(t.uOuter, 0.0);
+        gl.drawArrays(gl.TRIANGLES, 0, gridVertexCount(this.quality.terrainGrid));
+
         gl.enable(gl.POLYGON_OFFSET_FILL);
         gl.polygonOffset(2.0, 4.0);
         gl.uniform1i(t.uEdge, this.quality.skirtGrid);
         gl.uniform1f(t.uOuter, 1.0);       // also clears this pass's ink mask
         gl.drawArrays(gl.TRIANGLES, 0, gridVertexCount(this.quality.skirtGrid));
-
         gl.polygonOffset(0, 0);
         gl.disable(gl.POLYGON_OFFSET_FILL);
-        gl.uniform1i(t.uEdge, this.quality.terrainGrid);
-        gl.uniform1f(t.uOuter, 0.0);
-        gl.drawArrays(gl.TRIANGLES, 0, gridVertexCount(this.quality.terrainGrid));
+
+        // --- Props. Before the sea and with depth writes on, so a bucket
+        //     standing in the shallows is correctly drowned by it rather than
+        //     floating on top. Alpha-tested, never blended.
+        if (props && props.count > 0) {
+            props.upload();
+            gl.useProgram(this.pProps.handle);
+            const pu = this.pProps.uniforms;
+            gl.uniformMatrix4fv(pu.uViewProj, false, viewProj);
+            gl.uniform3fv(pu.uSunDir, env.sunDir);
+            gl.uniform3fv(pu.uCamRight, camera.right);
+            bindTexture(gl, this.pProps, 'uField', 0, sim.front);
+            bindTexture(gl, this.pProps, 'uBedrock', 1, sim.bedrock);
+            bindTexture(gl, this.pProps, 'uProps', 2, props.texture);
+            gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, props.count);
+        }
 
         // --- Sea. Alpha blended over the beach, depth-tested but not written,
         //     so the foam edge stays a soft ramp instead of a stair.

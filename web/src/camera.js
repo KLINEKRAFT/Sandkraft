@@ -4,12 +4,12 @@
 // purpose: the picking ray is built straight from the camera basis, which is
 // both shorter and better conditioned than unprojecting a clip-space point.
 
-export const DOMAIN = { minX: -24, minZ: -24, sizeX: 48, sizeZ: 48 };
+export const DOMAIN = { minX: -48, minZ: -48, sizeX: 96, sizeZ: 96 };
 
 export class Camera {
     constructor() {
-        this.target = [0, 0.9, -5];
-        this.distance = 36;
+        this.target = [0, 0.9, -10];
+        this.distance = 52;
         // Yaw 0 stands you behind the dunes looking out to sea, which is the
         // only opening shot for a beach. The sea is toward +Z, so the camera has
         // to sit at -Z — get the sign wrong and the game opens on a wall of dune.
@@ -37,7 +37,25 @@ export class Camera {
     }
 
     zoom(factor) {
-        this.distance = clamp(this.distance * factor, 9, 80);
+        this.distance = clamp(this.distance * factor, 8, 150);
+    }
+
+    /// Slide the look-at point across the ground. Two fingers dragged together
+    /// pan; twisted apart they orbit. On a 96 m beach panning stopped being
+    /// optional — you cannot reach the far headland by orbiting around the
+    /// middle of it.
+    pan(dx, dy) {
+        // Move in the camera's own ground plane so a drag goes where it looks
+        // like it should, and scale by distance so the ground tracks the finger
+        // at any zoom.
+        const k = this.distance * 0.9;
+        const fwd = normalize([this.forward[0], 0, this.forward[2]]);
+        this.target[0] += (-this.right[0] * dx + fwd[0] * dy) * k;
+        this.target[2] += (-this.right[2] * dx + fwd[2] * dy) * k;
+
+        // Keep the camera over the world rather than out in the fog.
+        this.target[0] = clamp(this.target[0], -60, 60);
+        this.target[2] = clamp(this.target[2], -60, 60);
     }
 
     update(aspect) {

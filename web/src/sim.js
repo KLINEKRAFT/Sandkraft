@@ -4,7 +4,14 @@
 import { program, floatTexture, framebuffer, bindTexture } from './gl.js';
 import { FULLSCREEN_VS, BEDROCK_BAKE_FS, SIM_INIT_FS, SIM_STEP_FS } from './shaders/sim.js';
 
-export const TOOL = { none: 0, dig: 1, pour: 2, pack: 3, wet: 4 };
+export const TOOL = {
+    none: 0, dig: 1, pour: 2, pack: 3, wet: 4, wall: 5, flatten: 6,
+    // Not solver tools — handled entirely on the CPU, but they live in the same
+    // enum so the UI has one vocabulary.
+    mould: 20, prop: 21, erase: 22,
+};
+
+export const MOULD_SHAPE = { tower: 0, block: 1, cone: 2 };
 
 export class SandSim {
     /// `resolution` is texels along one edge of the 48 m square. The native
@@ -13,10 +20,12 @@ export class SandSim {
     constructor(gl, floatRenderable, resolution = 256) {
         this.gl = gl;
         this.resolution = resolution;
+        this.floatRenderable = floatRenderable;
 
-        // The hardpack table. 512 texels over +/-40 m is 156 mm — finer than the
-        // 187 mm simulation grid, which is the only relationship that matters.
-        this.bedrockResolution = 512;
+        // The hardpack table, 144 m across. At 768 texels that is 187 mm —
+        // finer than the simulation grid at every tier, which is the only
+        // relationship that matters.
+        this.bedrockResolution = 768;
 
         this.pBake = program(gl, FULLSCREEN_VS, BEDROCK_BAKE_FS, 'bedrock_bake');
         this.pInit = program(gl, FULLSCREEN_VS, SIM_INIT_FS, 'sim_init');
@@ -30,7 +39,18 @@ export class SandSim {
         this.frontFBO = framebuffer(gl, this.front);
         this.backFBO = framebuffer(gl, this.back);
 
-        this.brush = { x: 0, z: 0, radius: 2.2, strength: 0, tool: TOOL.none };
+        // The stroke, as a segment. `ax,az` is where it was last step and
+        // `bx,bz` where it is now; the solver sweeps between them.
+        this.stroke = {
+            ax: 0, az: 0, bx: 0, bz: 0,
+            radius: 3.0, strength: 0, tool: TOOL.none,
+            shape: 0,                 // 0 round, 1 square
+            baseY: 0,                 // ground height where the stroke began
+            parameter: 1.2,           // wall height, mostly
+        };
+
+        this.stamp = null;
+        this.stampArmed = false;
 
         this.bakeBedrock();
     }
@@ -79,7 +99,7 @@ export class SandSim {
         if (!mirror) { return 1.0; }
 
         const N = this.bedrockResolution;
-        const E = 40.0;                       // must match SK BEDROCK_EXTENT
+        const E = 72.0;                       // must match BEDROCK_EXTENT in common.js
         const gx = ((x + E) / (2 * E)) * (N - 1);
         const gz = ((z + E) / (2 * E)) * (N - 1);
         if (!(gx >= 0 && gz >= 0 && gx <= N - 1 && gz <= N - 1)) { return 0.0; }
@@ -126,16 +146,32 @@ export class SandSim {
         gl.useProgram(this.pStep.handle);
 
         const u = this.pStep.uniforms;
+        const s = this.stroke;
         gl.uniform1f(u.uResolution, this.resolution);
         gl.uniform1f(u.uDt, sub);
         gl.uniform1f(u.uSeaBase, env.seaBase);
         gl.uniform1f(u.uWaveAmp, env.waveAmplitude);
         gl.uniform1f(u.uErosion, env.erosion);
-        gl.uniform4f(u.uBrush, this.brush.x, this.brush.z, this.brush.radius, this.brush.strength);
-        gl.uniform1i(u.uTool, this.brush.tool);
+        gl.uniform4f(u.uBrushA, s.ax, s.az, s.radius, s.strength);
+        gl.uniform4f(u.uBrushB, s.bx, s.bz, s.baseY, s.parameter);
+        gl.uniform1i(u.uTool, s.tool > 6 ? 0 : s.tool);
+        gl.uniform1i(u.uBrushShape, s.shape);
+
+        const st = this.stampArmed ? this.stamp : null;
 
         for (let i = 0; i < substeps; i++) {
             gl.uniform1f(u.uTime, env.time + sub * i);
+
+            // The mould lands on exactly one substep. Firing it on every substep
+            // would turn out four towers a millimetre apart, which reads as one
+            // very strange tower.
+            if (st && i === 0) {
+                gl.uniform4f(u.uStamp, st.x, st.z, st.radius, st.height);
+                gl.uniform4f(u.uStamp2, st.shape, st.rotation, 1, st.baseY);
+            } else {
+                gl.uniform4f(u.uStamp, 0, 0, 0, 0);
+                gl.uniform4f(u.uStamp2, 0, 0, 0, 0);
+            }
 
             gl.bindFramebuffer(gl.FRAMEBUFFER, this.backFBO);
             bindTexture(gl, this.pStep, 'uField', 0, this.front);
@@ -149,18 +185,123 @@ export class SandSim {
         }
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        if (st) { this.stampArmed = false; this.stamp = null; }
+
+        // The stroke's tail catches up with its head, so the next frame sweeps
+        // from here rather than from wherever the finger first went down.
+        s.ax = s.bx;
+        s.az = s.bz;
     }
 
-    setBrush(worldX, worldZ, radius, strength, tool) {
-        this.brush.x = worldX;
-        this.brush.z = worldZ;
-        this.brush.radius = radius;
-        this.brush.strength = strength;
-        this.brush.tool = tool;
+    // ------------------------------------------------------------------ input
+
+    /// Begin a stroke. `baseY` is the ground height under the first touch, and
+    /// it is what Wall builds up from and Flatten levels toward — sampled once,
+    /// so a wall stays at one height instead of following the ground it is
+    /// crossing.
+    beginStroke(x, z, { tool, radius, shape = 0, parameter = 1.2, baseY = 0 }) {
+        const s = this.stroke;
+        s.ax = s.bx = x;
+        s.az = s.bz = z;
+        s.tool = tool;
+        s.radius = radius;
+        s.shape = shape;
+        s.parameter = parameter;
+        s.baseY = baseY;
+        s.strength = 0;             // eased in by extendStroke
     }
 
-    clearBrush() {
-        this.brush.strength = 0;
-        this.brush.tool = TOOL.none;
+    /// Continue a stroke. `ramp` is 0..1 and is what stops a tap from gouging:
+    /// the tool arrives over about a fifth of a second instead of at full rate
+    /// on the first frame.
+    extendStroke(x, z, ramp = 1) {
+        const s = this.stroke;
+        s.bx = x;
+        s.bz = z;
+        s.strength = Math.max(0, Math.min(1, ramp));
+    }
+
+    endStroke() {
+        this.stroke.strength = 0;
+        this.stroke.tool = TOOL.none;
+    }
+
+    /// Arm a mould to be turned out on the next step.
+    armMould({ x, z, radius, height, shape, rotation = 0 }) {
+        this.stamp = { x, z, radius, height, shape, rotation, baseY: this.surfaceAt(x, z) };
+        this.stampArmed = true;
+    }
+
+    /// The *live* surface height at a world point: baked hardpack from the CPU
+    /// mirror, plus a one-texel readback of the sand standing on it.
+    ///
+    /// A one-pixel readPixels stalls the pipeline, which is why this is never
+    /// called per frame — only when a mould is placed, which is once per tap.
+    /// It is worth the stall: without it a tower stamped on top of an existing
+    /// mound sinks into it, because the mirror only knows the pristine shore.
+    surfaceAt(x, z) {
+        const gl = this.gl;
+        const base = this.groundAt(x, z);          // hardpack + pristine bed
+        if (!this.floatRenderable) { return base; }
+
+        const uvx = (x + 48) / 96, uvz = (z + 48) / 96;
+        if (uvx < 0 || uvx > 1 || uvz < 0 || uvz > 1) { return base; }
+
+        const tx = Math.min(this.resolution - 1, Math.max(0, Math.floor(uvx * this.resolution)));
+        const tz = Math.min(this.resolution - 1, Math.max(0, Math.floor(uvz * this.resolution)));
+
+        try {
+            const px = new Float32Array(4);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.frontFBO);
+            gl.readPixels(tx, tz, 1, 1, gl.RGBA, gl.FLOAT, px);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            if (gl.getError() !== gl.NO_ERROR) { return base; }
+            // The mirror's .r is the hardpack; swap its pristine bed for the
+            // live depth we just read.
+            return this.bedrockAt(x, z) + px[0];
+        } catch (e) {
+            return base;
+        }
+    }
+
+    /// Hardpack alone, from the CPU mirror.
+    bedrockAt(x, z) {
+        const mirror = this.heightMirror;
+        if (!mirror) { return 0; }
+        const N = this.bedrockResolution, E = 72.0;
+        const gx = Math.round(((x + E) / (2 * E)) * (N - 1));
+        const gz = Math.round(((z + E) / (2 * E)) * (N - 1));
+        if (gx < 0 || gz < 0 || gx > N - 1 || gz > N - 1) { return 0; }
+        return mirror[(gz * N + gx) * 4];
+    }
+
+    // ------------------------------------------------------------ save / load
+
+    /// The whole field, for a save slot. RGBA32F, resolution² texels.
+    snapshot() {
+        const gl = this.gl;
+        if (!this.floatRenderable) { return null; }
+        const n = this.resolution;
+        const buf = new Float32Array(n * n * 4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.frontFBO);
+        gl.readPixels(0, 0, n, n, gl.RGBA, gl.FLOAT, buf);
+        const ok = gl.getError() === gl.NO_ERROR;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        return ok ? buf : null;
+    }
+
+    /// Put a saved field back. Refuses a mismatched resolution rather than
+    /// uploading it at the wrong stride and shredding the shore.
+    restore(field, resolution) {
+        if (resolution !== this.resolution) { return false; }
+        const gl = this.gl;
+        const n = this.resolution;
+        if (!field || field.length !== n * n * 4) { return false; }
+        gl.bindTexture(gl.TEXTURE_2D, this.front);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, n, gl.RGBA, gl.FLOAT,
+                         field instanceof Float32Array ? field : new Float32Array(field));
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        return true;
     }
 }

@@ -13,7 +13,7 @@ export class Input {
 
         this.pointers = new Map();
         this.orbiting = false;
-        this.pinchDistance = 0;
+        this.panning = false;
         this.lastOrbit = null;
 
         // Pointer Events cover touch, mouse and pencil in one API, and Safari on
@@ -45,9 +45,11 @@ export class Input {
         this.canvas.setPointerCapture(e.pointerId);
         this.pointers.set(e.pointerId, this.normalised(e));
 
-        const secondary = e.button === 2 || e.shiftKey;
+        const secondary = e.button === 2 || e.button === 1 || e.shiftKey;
         if (this.pointers.size >= 2 || secondary) {
             this.orbiting = true;
+            // Middle button or a held Space pans; right button or Shift orbits.
+            if (e.button === 1 || e.ctrlKey) { this.panning = true; }
             this.cb.onStopWork();
             this.beginOrbit();
         } else {
@@ -98,11 +100,23 @@ export class Input {
         const was = this.lastOrbit;
         if (!now || !was) { return; }
 
-        this.camera.orbit((now.cx - was.cx) * -3.2, (now.cy - was.cy) * 2.2);
+        const dx = now.cx - was.cx;
+        const dy = now.cy - was.cy;
+
+        if (this.panning) {
+            this.camera.pan(dx, dy);
+        } else {
+            this.camera.orbit(dx * -3.2, dy * 2.2);
+        }
 
         if (now.spread > 0 && was.spread > 0) {
             this.camera.zoom(was.spread / now.spread);
         }
         this.lastOrbit = now;
     }
+
+    /// Two fingers orbit; two fingers with a modifier — or the middle mouse
+    /// button — pan instead. Set by the UI's Pan toggle on touch, where there
+    /// is no modifier to hold.
+    setPanning(on) { this.panning = !!on; }
 }
