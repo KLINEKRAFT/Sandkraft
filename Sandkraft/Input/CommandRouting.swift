@@ -9,6 +9,18 @@
 //  screen does not grow eight more `.onReceive` lines every time a shortcut is
 //  added.
 //
+//  **Applied in groups, not as one chain**, for the same reason `PlayView.body`
+//  and `SettingsView.body` are. Swift type-checks a whole expression at once
+//  against a wall-clock budget, and a chain of twenty `.onReceive` calls — each
+//  one a generic function taking the opaque result of the last — is a single
+//  inference problem with twenty nested unknowns in it. This file went over the
+//  budget the moment a twenty-first was added, and it did so on CI rather than
+//  on a laptop, which is the only reason it was caught before shipping.
+//
+//  The rule this project now works to: **any view with more than about a dozen
+//  chained modifiers gets split.** The grouping below is by what the commands
+//  do, which makes the split useful to read as well as necessary to compile.
+//
 
 import SwiftUI
 
@@ -22,10 +34,15 @@ struct CommandRouting: ViewModifier {
     @Binding var chromeHidden: Bool
 
     func body(content: Content) -> some View {
+        let withTools = toolCommands(content)
+        let withBeaches = beachCommands(withTools)
+        let withScene = sceneCommands(withBeaches)
+        return panelCommands(withScene)
+    }
+
+    /// What is in your hand, and how it behaves.
+    private func toolCommands<V: View>(_ content: V) -> some View {
         content
-            .onReceive(NotificationCenter.default.publisher(for: .skToggleChrome)) { _ in
-                chromeHidden.toggle()
-            }
             .onReceive(NotificationCenter.default.publisher(for: .skSelectTool)) { note in
                 guard let id = note.object as? ToolID,
                       model.availableTools.contains(where: { $0.id == id }) else { return }
@@ -40,8 +57,24 @@ struct CommandRouting: ViewModifier {
                       let shape = BrushShape(rawValue: raw) else { return }
                 model.brushShape = shape
             }
-            .onReceive(NotificationCenter.default.publisher(for: .skTakePhoto)) { _ in
-                model.takePhoto()
+            .onReceive(NotificationCenter.default.publisher(for: .skToggleSnapToGrid)) { _ in
+                model.snapToGrid.toggle()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .skToggleStraightStrokes)) { _ in
+                model.straightStrokes.toggle()
+            }
+    }
+
+    /// Keeping a beach, letting one go, and getting one in or out of a file.
+    private func beachCommands<V: View>(_ content: V) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .skKeepBeach)) { _ in
+                // No name and no dialog. ⌘S is a reflex, and a reflex that stops
+                // to ask a question is one people stop using.
+                model.saveBeachToLibrary()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .skShowBeaches)) { _ in
+                sheet = .beaches
             }
             .onReceive(NotificationCenter.default.publisher(for: .skSaveBeach)) { _ in
                 model.saveBeach()
@@ -49,22 +82,16 @@ struct CommandRouting: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .skOpenBeach)) { _ in
                 model.openBeach()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .skKeepBeach)) { _ in
-                // No name and no dialog. ⌘S is a reflex, and a reflex that
-                // stops to ask a question is one people stop using.
-                model.saveBeachToLibrary()
+            .onReceive(NotificationCenter.default.publisher(for: .skTakePhoto)) { _ in
+                model.takePhoto()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .skShowBeaches)) { _ in
-                sheet = .beaches
-            }
+    }
+
+    /// The beach itself: time, history, and what it looks like.
+    private func sceneCommands<V: View>(_ content: V) -> some View {
+        content
             .onReceive(NotificationCenter.default.publisher(for: .skTogglePause)) { _ in
                 model.isPaused.toggle()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .skToggleSnapToGrid)) { _ in
-                model.snapToGrid.toggle()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .skToggleStraightStrokes)) { _ in
-                model.straightStrokes.toggle()
             }
             .onReceive(NotificationCenter.default.publisher(for: .skResetBeach)) { _ in
                 coordinator.resetBeach()
@@ -76,17 +103,25 @@ struct CommandRouting: ViewModifier {
                 let next = (index + step + all.count) % all.count
                 model.lookID = all[next]
             }
-            .onReceive(NotificationCenter.default.publisher(for: .skShowFieldNotes)) { _ in
-                sheet = .fieldNotes
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .skShowSettings)) { _ in
-                sheet = .settings
-            }
             .onReceive(NotificationCenter.default.publisher(for: .skUndo)) { _ in
                 coordinator.undo()
             }
             .onReceive(NotificationCenter.default.publisher(for: .skRedo)) { _ in
                 coordinator.redo()
+            }
+    }
+
+    /// What is on screen over the top of it.
+    private func panelCommands<V: View>(_ content: V) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .skToggleChrome)) { _ in
+                chromeHidden.toggle()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .skShowFieldNotes)) { _ in
+                sheet = .fieldNotes
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .skShowSettings)) { _ in
+                sheet = .settings
             }
     }
 }
