@@ -95,6 +95,15 @@ struct PlayView: View {
     @State private var exportingBeach = false
     @State private var importingBeach = false
 
+    /// A system file panel that has been asked for but not yet put up. See
+    /// `present(_:)` — this queue is the fix for "Save this beach… does
+    /// nothing".
+    @State private var queuedPanel: SystemPanel?
+    /// True between a sheet being told to go away and its dismissal animation
+    /// finishing. SwiftUI does not offer this as state, and during it a sheet is
+    /// still, as far as presentation is concerned, up.
+    @State private var sheetIsDismissing = false
+
     private var isCompact: Bool {
         #if os(macOS)
         return false
@@ -133,7 +142,19 @@ struct PlayView: View {
         }
         .animation(.skSlow, value: model.phase)
         .animation(.skSnap, value: chromeHidden)
-        .sheet(item: $sheet) { which in
+        .onChange(of: sheet) { old, new in
+            if old != nil, new == nil { sheetIsDismissing = true }
+        }
+        // `onDismiss` is spelled out rather than trailing, because it comes
+        // before `content` in the signature and a second trailing closure can
+        // only bind to a parameter that comes after the first one.
+        .sheet(item: $sheet, onDismiss: {
+            // The only callback SwiftUI offers that means "the sheet has
+            // actually finished going away", and therefore the only safe moment
+            // to put a file panel up in its place.
+            sheetIsDismissing = false
+            flushQueuedPanel()
+        }) { which in
             // The sheet supplies its own platform chrome; see `skSheetChrome`.
             PlaySheetContent(which: which, model: model)
         }
@@ -150,6 +171,18 @@ struct PlayView: View {
             let look = Look.look(newValue)
             showHint("\(look.name) — \(look.note)")
         }
+        // Same argument as the look above: ⌘\ and ⌘' change how the tool in your
+        // hand behaves and show nothing at all while doing it. A switch you
+        // cannot see the state of is a switch you flip by accident and then
+        // spend five minutes blaming the sand for.
+        .onChange(of: model.straightStrokes) { _, on in
+            showHint(on ? "Straight strokes on — a stroke locks to eight directions."
+                        : "Straight strokes off.")
+        }
+        .onChange(of: model.snapToGrid) { _, on in
+            showHint(on ? String(format: "Grid on — %.2f m.", model.snapSpacing)
+                        : "Grid off.")
+        }
         .onAppear {
             model.reducedMotion = reduceMotion
             coordinator.haptics.enabled = model.hapticsEnabled
@@ -161,8 +194,8 @@ struct PlayView: View {
         .onChange(of: model.pendingPhoto != nil) { _, arrived in
             guard arrived, let data = model.pendingPhoto else { return }
             photo = PhotoDocument(data: data)
-            exportingPhoto = true
             model.pendingPhoto = nil
+            present(.savePhoto)
         }
         .fileExporter(isPresented: $exportingPhoto,
                       document: photo,
@@ -177,13 +210,13 @@ struct PlayView: View {
         .onChange(of: model.openBeachWanted) { _, wants in
             guard wants else { return }
             model.openBeachWanted = false
-            importingBeach = true
+            present(.openBeach)
         }
         .onChange(of: model.pendingBeach != nil) { _, ready in
             guard ready, let data = model.pendingBeach else { return }
             beach = BeachFile(data: data)
-            exportingBeach = true
             model.pendingBeach = nil
+            present(.saveBeach)
         }
         .fileExporter(isPresented: $exportingBeach,
                       document: beach,
@@ -321,6 +354,49 @@ struct PlayView: View {
         }
         .animation(.skSnap, value: hint)
         .animation(.skSnap, value: showObjectives)
+    }
+
+    // MARK: - System panels
+    //
+    // Save, Open and Photograph all end in a system file panel, and all three
+    // can be asked for from inside Settings — which is a sheet.
+    //
+    // SwiftUI will not present two things modally from the same view, and it
+    // declines by doing nothing whatsoever: no error, no log line, no panel.
+    // `Save this beach…` therefore did exactly nothing, every time, for as long
+    // as it has existed, because the exporter it asked for lives on this view
+    // and this view was underneath the Settings sheet at the moment of asking.
+    // That is what "I tried saving a beach and it didn't do anything" is.
+    //
+    // So a request is queued rather than presented. It goes up immediately when
+    // there is no sheet, and otherwise waits for the sheet's `onDismiss` — the
+    // one callback that means the sheet has finished animating away rather than
+    // merely having been told to.
+
+    enum SystemPanel {
+        case savePhoto, saveBeach, openBeach
+    }
+
+    private func present(_ panel: SystemPanel) {
+        guard sheet == nil, !sheetIsDismissing else {
+            queuedPanel = panel
+            return
+        }
+        show(panel)
+    }
+
+    private func flushQueuedPanel() {
+        guard let panel = queuedPanel else { return }
+        queuedPanel = nil
+        show(panel)
+    }
+
+    private func show(_ panel: SystemPanel) {
+        switch panel {
+        case .savePhoto: exportingPhoto = true
+        case .saveBeach: exportingBeach = true
+        case .openBeach: importingBeach = true
+        }
     }
 
     private func showHint(_ text: String) {

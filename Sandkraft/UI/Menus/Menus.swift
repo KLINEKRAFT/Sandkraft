@@ -14,23 +14,26 @@ import SwiftUI
 
 // MARK: - Title
 //
-// This screen has been rewritten once already, and the thing it was rewritten
-// away from is worth naming, because it is the default any interface drifts
-// toward when nobody is watching: a centred column of frosted-glass cards, each
-// with a radio dot on the right, under a wordmark letterspaced so wide it had
-// to be nudged sideways to look centred. Every element announcing itself.
+// A title card, not a menu screen.
 //
-// What replaced it is one left-aligned column against a scrim. The rules:
+// This is the second rewrite, and the two things it was rewritten away from are
+// worth naming because they are the two directions this kind of screen falls
+// over in. The first version was a centred stack of frosted-glass cards with
+// radio dots under a wordmark letterspaced past legibility — busy, generic,
+// every element announcing itself. The second was so restrained it was dull: a
+// left-aligned column of small grey type that read like a settings pane.
 //
-//   · The beach is the picture. The interface does not compete with it, and it
-//     does not blur it into a backdrop either — the sand behind this screen is
-//     the sand you are about to work.
-//   · One thing is a button. Begin. Everything else is text you can press,
-//     which is what a menu item has always been.
-//   · A mode is a line in a list. Not a card, not a tile, not a panel. Three
-//     lines, a hairline between them, and the one you are on is the one wearing
-//     the accent.
-//   · Nothing is letterspaced past the point of being a word.
+// What is here now takes the beach seriously as the picture:
+//
+//   · The mark sits high and the menu sits low, and the middle of the screen is
+//     left alone. That gap is the whole design — it is where the sea is.
+//   · The scrim is a vignette, dark at the top and bottom where the words are
+//     and almost clear across the middle. Nothing is blurred.
+//   · Everything is centred on one axis, so the eye falls down the middle of
+//     the screen: mark, wordmark, modes, tides, Begin.
+//   · A mode is a line of type. Selecting one turns it amber and writes a
+//     sentence underneath. There is no card, no dot and no panel anywhere on
+//     this screen.
 
 struct TitleView: View {
     @Bindable var model: GameModel
@@ -49,30 +52,38 @@ struct TitleView: View {
     @State private var showingFieldNotes = false
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            // A scrim rather than a panel. It holds at full strength across the
-            // column and is gone by two-thirds of the way over, so the beach is
-            // still a beach — which a full-screen sheet of frosted glass is not.
-            // Stops rather than evenly-spaced colours, because on a phone the
-            // column is most of the width and an even fade would put the ends of
-            // every line over clear sky.
-            LinearGradient(stops: [.init(color: .black.opacity(0.74), location: 0.00),
-                                   .init(color: .black.opacity(0.70), location: 0.42),
-                                   .init(color: .black.opacity(0.00), location: 0.92)],
-                           startPoint: .leading, endPoint: .trailing)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
+        ZStack {
+            vignette
 
-            ScrollView(.vertical, showsIndicators: false) {
-                column
-                    .frame(maxWidth: 460, alignment: .leading)
-                    .padding(.horizontal, Metric.xxl)
-                    .padding(.vertical, Metric.xxl)
-                    // The 460 cap centres itself in whatever it is given unless
-                    // it is told otherwise, and a title screen that drifts to
-                    // the middle of a wide Mac window is the centred layout this
-                    // was rewritten away from, arrived at by accident.
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            GeometryReader { geo in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        SandkraftLogo(markHeight: logoHeight(for: geo.size))
+                            .padding(.top, geo.size.height * 0.07)
+                            .skLegible()
+
+                        // All of the slack lives here, which is what puts the
+                        // mark at the top, the menu at the bottom, and the sea
+                        // between them.
+                        Spacer(minLength: Metric.xl)
+
+                        menu
+                            .frame(maxWidth: 520)
+                            .padding(.horizontal, Metric.xl)
+
+                        BrandMark(height: 18)
+                            .padding(.top, Metric.xl)
+                            .padding(.bottom, Metric.l)
+                            .skLegible()
+                    }
+                    .frame(maxWidth: .infinity)
+                    // Fills the screen when the content is shorter than it,
+                    // which is what gives the Spacer something to expand into.
+                    // Above that height it scrolls, so a short window or a
+                    // large Dynamic Type size gets a scroll bar rather than a
+                    // Begin button somewhere off the bottom edge.
+                    .frame(minHeight: geo.size.height)
+                }
             }
         }
         .sheet(isPresented: $showingFieldNotes) {
@@ -89,71 +100,89 @@ struct TitleView: View {
         }
     }
 
-    private var column: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Sandkraft")
-                .font(.skDisplay(40, weight: .regular))
-                .tracking(-0.5)
-                .skLegible()
+    /// Dark at the top and bottom, nearly clear across the middle.
+    ///
+    /// The numbers are locations rather than an even ramp on purpose: the two
+    /// dark ends have to reach exactly as far as the type does and then stop,
+    /// because every millimetre past that is beach being covered up for nothing.
+    private var vignette: some View {
+        LinearGradient(stops: [.init(color: .black.opacity(0.82), location: 0.00),
+                               .init(color: .black.opacity(0.30), location: 0.24),
+                               .init(color: .black.opacity(0.04), location: 0.42),
+                               .init(color: .black.opacity(0.38), location: 0.62),
+                               .init(color: .black.opacity(0.88), location: 1.00)],
+                       startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+    }
 
-            Text("Dry sand cannot stand.")
-                .font(.skProse(13))
-                .foregroundStyle(Palette.secondaryText)
-                .padding(.top, Metric.s)
-                .skLegible()
+    /// The mark scales with the window rather than sitting at one size. A
+    /// ninety-point castle is a title on a Mac and most of an iPhone.
+    private func logoHeight(for size: CGSize) -> CGFloat {
+        min(max(size.height * 0.155, 56), 110)
+    }
 
+    private var menu: some View {
+        VStack(spacing: Metric.l) {
             if let storedBeach, let onContinue {
                 ContinueRow(beach: storedBeach, action: onContinue)
-                    .padding(.top, Metric.xl)
             }
 
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(GameMode.allCases.enumerated()), id: \.element) { index, mode in
-                    if index > 0 {
-                        Rectangle()
-                            .fill(Color.white.opacity(0.10))
-                            .frame(height: 1)
-                    }
-                    ModeRow(mode: mode,
-                            selected: selectedMode == mode,
-                            progress: mode == .tides ? model.campaignProgress : nil) {
-                        withAnimation(.skSnap) { selectedMode = mode }
-                    }
-                }
-            }
-            .padding(.top, Metric.xxl)
+            modes
 
             if selectedMode == .tides {
                 TidePicker(progress: model.campaignProgress) { number in
                     onStart(.tides, number)
                 }
-                .padding(.top, Metric.l)
                 .transition(.opacity)
             }
 
             actions
-                .padding(.top, Metric.xl)
-
-            BrandMark(height: 20)
-                .padding(.top, Metric.xxxl)
-                .skLegible()
         }
         .animation(.skSnap, value: selectedMode)
     }
 
-    /// One filled button and two quiet ones. Begin is missing under Nine Tides
-    /// on purpose: there, the tide you press *is* the begin button, and a second
-    /// one would only raise the question of which tide it meant.
+    /// Three lines of type. The selected one is amber and writes a sentence
+    /// underneath itself — which is the only thing on this screen that changes
+    /// height, and the reason the sentence is under all three rather than
+    /// inside the one it belongs to.
+    private var modes: some View {
+        VStack(spacing: Metric.s) {
+            ForEach(GameMode.allCases) { mode in
+                ModeLine(mode: mode,
+                         selected: selectedMode == mode,
+                         progress: mode == .tides ? model.campaignProgress : nil) {
+                    withAnimation(.skSnap) { selectedMode = mode }
+                }
+            }
+
+            Text(selectedMode.longDescription)
+                .font(.skProse(12))
+                .lineSpacing(skProseSpacing - 2)
+                .foregroundStyle(Palette.secondaryText)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 430)
+                .padding(.top, Metric.xs)
+                .skLegible()
+        }
+    }
+
+    /// Begin, and two words. Begin is missing under Nine Tides on purpose:
+    /// there, the tide you press *is* the begin button, and a second one would
+    /// only raise the question of which tide it meant.
     private var actions: some View {
-        HStack(spacing: Metric.xl) {
+        VStack(spacing: Metric.m) {
             if selectedMode != .tides {
                 Button {
                     onStart(selectedMode, 1)
                 } label: {
                     Text("Begin")
-                        .font(.skDisplay(14, weight: .medium))
+                        .font(.skDisplay(15, weight: .medium))
+                        .tracking(1.5)
+                        .textCase(.uppercase)
                         .foregroundStyle(Color.black.opacity(0.85))
-                        .padding(.horizontal, Metric.xl)
+                        .padding(.horizontal, Metric.xxxl)
                         .padding(.vertical, Metric.m)
                         .background { Capsule().fill(Palette.accent) }
                 }
@@ -161,39 +190,38 @@ struct TitleView: View {
                 .keyboardShortcut(.defaultAction)
             }
 
-            if let onResume {
-                TextAction("Resume", shortcut: .cancelAction, action: onResume)
+            HStack(spacing: Metric.xl) {
+                if let onResume {
+                    TextAction("Resume", shortcut: .cancelAction, action: onResume)
+                }
+                TextAction("Field Notes") { showingFieldNotes = true }
             }
-
-            TextAction("Field Notes") { showingFieldNotes = true }
-
-            Spacer(minLength: 0)
         }
     }
 }
 
 /// The beach you were working on last time, offered back.
 ///
-/// Above the mode list rather than beside Begin, because it is not a fourth
-/// mode and it is not the same kind of decision: the three below are *what to
-/// play*, and this is *carry on*. It says when and it says which mode, because
-/// "Continue" on its own asks the player to remember something they have had a
-/// day to forget.
+/// Above the modes rather than beside Begin, because it is not a fourth mode
+/// and it is not the same kind of decision: the three below are *what to play*,
+/// and this is *carry on*. It says when and which mode, because "Continue" on
+/// its own asks the player to remember something they have had a day to forget.
 struct ContinueRow: View {
     let beach: BeachHeader
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: Metric.s) {
+            VStack(spacing: 2) {
                 Text("Continue")
                     .font(.skDisplay(15, weight: .medium))
+                    .tracking(1)
                     .foregroundStyle(Palette.accent)
                 Text("\(beach.mode.title) · \(beach.savedAt.formatted(.relative(presentation: .named)))")
-                    .font(.skProse(12))
+                    .font(.skProse(11))
                     .foregroundStyle(Palette.secondaryText)
-                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity)
             .padding(.vertical, Metric.s)
             .contentShape(Rectangle())
             .skLegible()
@@ -204,8 +232,8 @@ struct ContinueRow: View {
     }
 }
 
-/// A menu item that looks like a menu item: a word you can press. The underline
-/// on press is the whole of the affordance, and it is enough.
+/// A menu item that looks like a menu item: a word you can press. The press
+/// feedback is the whole of the affordance, and it is enough.
 struct TextAction: View {
     let title: String
     let shortcut: KeyboardShortcut?
@@ -225,6 +253,7 @@ struct TextAction: View {
                 // The tap target is bigger than the word. Without this a
                 // thirteen-point line of text is a nine-point target.
                 .padding(.vertical, Metric.s)
+                .padding(.horizontal, Metric.s)
                 .contentShape(Rectangle())
                 .skLegible()
         }
@@ -235,11 +264,12 @@ struct TextAction: View {
     }
 }
 
-/// A mode, as a line. The accent bar on the left is the only selection mark —
-/// no dot, no tick, no card behind it — and the description under the name
-/// appears only for the line you are on, so two of the three are always one
-/// line tall.
-struct ModeRow: View {
+/// A mode, as a centred line of type.
+///
+/// The tap target is the full width of the column rather than the width of the
+/// word, so "Rising" — six characters — is not a harder thing to press than
+/// "Open Shore".
+struct ModeLine: View {
     let mode: GameMode
     let selected: Bool
     let progress: Int?
@@ -247,35 +277,21 @@ struct ModeRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .top, spacing: Metric.m) {
-                Rectangle()
-                    .fill(selected ? Palette.accent : Color.clear)
-                    .frame(width: 2)
-
-                VStack(alignment: .leading, spacing: Metric.xs) {
-                    HStack(spacing: Metric.s) {
-                        Text(mode.title)
-                            .font(.skDisplay(19, weight: selected ? .medium : .regular))
-                            .foregroundStyle(selected ? Palette.primaryText
-                                                      : Palette.primaryText.opacity(0.7))
-                        if let progress, progress > 1 {
-                            Text("tide \(min(progress, Tide.campaign.count)) of \(Tide.campaign.count)")
-                                .font(Typeface.font(10, .regular))
-                                .foregroundStyle(Palette.accent)
-                        }
-                    }
-
-                    Text(selected ? mode.longDescription : mode.subtitle)
-                        .font(.skProse(12))
-                        .lineSpacing(skProseSpacing - 2)
+            HStack(spacing: Metric.s) {
+                Text(mode.title)
+                    .font(.skDisplay(17, weight: selected ? .medium : .regular))
+                    .tracking(3)
+                    .textCase(.uppercase)
+                    .foregroundStyle(selected ? Palette.accent
+                                              : Palette.primaryText.opacity(0.62))
+                if let progress, progress > 1 {
+                    Text("\(min(progress, Tide.campaign.count))/\(Tide.campaign.count)")
+                        .font(Typeface.font(10, .regular))
                         .foregroundStyle(Palette.secondaryText)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
-
-                Spacer(minLength: 0)
             }
-            .padding(.vertical, Metric.m)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Metric.xs)
             .contentShape(Rectangle())
             .skLegible()
         }
@@ -284,13 +300,13 @@ struct ModeRow: View {
     }
 }
 
-/// Nine numbers in a row, and the name of the one you are about to press.
+/// Nine numbers, centred, naming only the one you are pointing at.
 ///
 /// The grid of nine labelled tiles this replaced was the single largest object
 /// on the title screen — nine panels, nine names set in ten-point type nobody
 /// read, and a heading and a caption above them explaining what a numbered list
 /// is. The tide's name is worth exactly one line, and only for the tide the
-/// pointer is actually on.
+/// pointer is on.
 struct TidePicker: View {
     /// How far the campaign has been played. Passed in rather than read off the
     /// model, because that is the only thing this view needs from it.
@@ -305,14 +321,13 @@ struct TidePicker: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metric.s) {
+        VStack(spacing: Metric.s) {
             // A grid rather than an HStack, and adaptive rather than fixed at
             // nine. Nine forty-two-point circles is 450 points of row, and an
-            // iPhone in portrait has about 330 to give — so on a Mac this is one
-            // row of nine and on a phone it wraps to two, without either of them
+            // iPhone in portrait has about 330 to give — so on a Mac this is
+            // one row of nine and on a phone it wraps to two, without either
             // being a special case or a horizontal scroller nobody discovers.
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 42), spacing: Metric.s)],
-                      alignment: .leading,
                       spacing: Metric.s) {
                 ForEach(Tide.campaign) { tide in
                     let unlocked = tide.number <= progress
@@ -325,9 +340,9 @@ struct TidePicker: View {
                                                       : Palette.secondaryText.opacity(0.35))
                             // Forty-two rather than the thirty-two this looks
                             // like it wants to be: `Metric.touchTarget` is
-                            // forty-four, the gap makes up the difference, and a
-                            // number you have to aim at is a number you press by
-                            // accident.
+                            // forty-four, the gap makes up the difference, and
+                            // a number you have to aim at is a number you press
+                            // by accident.
                             .frame(width: 42, height: 42)
                             .background {
                                 Circle()
@@ -347,19 +362,19 @@ struct TidePicker: View {
                     .accessibilityHint(unlocked ? "Begin this tide" : "Locked until you reach it")
                 }
             }
+            .frame(maxWidth: 460)
 
             if let tide = captionTide {
                 Text("\(tide.number). \(tide.name)")
                     .font(.skProse(12))
                     .foregroundStyle(Palette.secondaryText)
-                    // A floor, not a fixed height: it stops the row below hopping
-                    // as the pointer moves along the numbers, without clipping the
-                    // line at the larger Dynamic Type sizes.
-                    .frame(minHeight: 18, alignment: .leading)
+                    // A floor, not a fixed height: it stops the row below
+                    // hopping as the pointer moves along the numbers, without
+                    // clipping the line at the larger Dynamic Type sizes.
+                    .frame(minHeight: 18)
                     .skLegible()
             }
         }
-        .animation(.skSnap, value: hovered)
     }
 }
 

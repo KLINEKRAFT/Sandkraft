@@ -92,14 +92,20 @@ final class SceneCoordinator: NSObject, ObservableObject {
         input.paused = model.isPaused
         input.reducedMotion = model.reducedMotion
 
-        input.cursorWorld = SIMD2(cursorWorld.x, cursorWorld.z)
+        // Drawn where the tool will land, not where the pointer is. With both
+        // drafting switches off these are the same point and this costs an early
+        // return; with either on, it is the difference between a grid you can
+        // work to and a grid that moves the sand somewhere you did not look.
+        let aim = model.draftedPosition(cursorWorld)
+
+        input.cursorWorld = SIMD2(aim.x, aim.z)
         input.cursorRadius = Float(model.tool.radius * model.brushScale)
         input.cursorVisible = cursorValid && model.phase != .briefing && model.phase != .reckoning
         input.cursorSquare = model.brushShape == .square
 
         if model.selectedToolID == .mould, cursorValid {
             input.ghostVisible = input.cursorVisible
-            input.ghostOrigin = SIMD2(cursorWorld.x, cursorWorld.z)
+            input.ghostOrigin = SIMD2(aim.x, aim.z)
             input.ghostRadius = Float(model.mould.radius * model.brushScale)
             input.ghostRotation = mouldRotation
             input.ghostShape = model.mould.shapeIndex
@@ -270,12 +276,24 @@ final class SceneCoordinator: NSObject, ObservableObject {
         renderer.camera.isInteracting = true
         // Radians per point. Tuned so a full swipe across an iPhone is a little
         // under half a turn — enough to get behind a castle in one gesture.
-        renderer.camera.orbit(deltaAzimuth: -dx * 0.0062, deltaElevation: dy * 0.0050)
+        //
+        // The two inversions are applied here rather than at the gesture
+        // recognisers, of which there are five across two platforms: a mouse
+        // drag, a trackpad drag, ⇧-scroll, a two-finger pan and an ⌥-drag all
+        // arrive at this one function, and a preference honoured in four of the
+        // five places is a preference that is broken.
+        let sx: Float = model.invertOrbitX ? -1 : 1
+        let sy: Float = model.invertOrbitY ? -1 : 1
+        renderer.camera.orbit(deltaAzimuth: -dx * 0.0062 * sx,
+                              deltaElevation: dy * 0.0050 * sy)
     }
 
     func dolly(scale: Float) {
         renderer.camera.isInteracting = true
-        renderer.camera.dolly(scale: scale)
+        // A dolly is a *ratio*, so inverting it is a reciprocal rather than a
+        // sign flip. Negating it would push the camera through the beach.
+        let s = model.invertZoom ? 1 / max(scale, 0.01) : scale
+        renderer.camera.dolly(scale: s)
     }
 
     func pan(dx: Float, dy: Float) {
@@ -289,6 +307,16 @@ final class SceneCoordinator: NSObject, ObservableObject {
 
     func rotateMould(by radians: Float) {
         mouldRotation += radians
+
+        // Straight strokes square a wall; this squares the turret that stands on
+        // it. Snapping the *accumulated* angle rather than the delta is what
+        // makes it land on absolute multiples of fifteen degrees — snapping each
+        // delta would round a hundred tiny twists to zero and the mould would
+        // never turn at all.
+        if model.straightStrokes {
+            let step = GameModel.mouldRotationStepDegrees * .pi / 180
+            mouldRotation = (mouldRotation / step).rounded() * step
+        }
     }
 
     // MARK: - Commands

@@ -286,6 +286,57 @@ final class GameModel {
     var showAdvancedReadouts = false
     var qualityTier: QualityTier = .medium
 
+    // MARK: Drafting
+    //
+    // Sand does not come with straight edges, and a hand dragged across a
+    // trackpad does not draw one. Everything below exists so that a wall, a
+    // trench or a row of turrets can be laid out to a line when that is what is
+    // wanted — and left entirely alone when it is not, which is why both of
+    // these are off by default. A game about a material that slumps should not
+    // open with a grid switched on.
+
+    /// Round every point of a stroke onto a lattice, so two walls built five
+    /// minutes apart line up with each other.
+    var snapToGrid = false
+
+    /// Lattice pitch, in metres. Anything from a hand's width to a pace.
+    var snapSpacing: Double = 0.5
+
+    /// Lock a stroke to one of eight directions from wherever it started. This
+    /// is the one that makes a wall straight; the grid only makes it *placed*.
+    var straightStrokes = false
+
+    /// The eight directions, as a step in radians. Eight rather than four
+    /// because a castle wants corners and diagonals, and rather than sixteen
+    /// because a direction you cannot feel yourself snapping to is one that
+    /// reads as the tool wandering.
+    static let strokeDirectionStep = Float.pi / 4
+
+    /// Increment a mould turns through, in degrees, while straight strokes are
+    /// on. Fifteen divides into ninety, so a turret can be squared to a wall.
+    static let mouldRotationStepDegrees: Float = 15
+
+    // MARK: Camera comfort
+    //
+    // Which way a drag turns the world is not a thing with a right answer — it
+    // is a thing people have opposite and equally strong feelings about, and
+    // the feelings differ between a mouse and a trackpad on the same machine.
+    // So it is three switches rather than an argument.
+
+    var invertOrbitX = false
+    var invertOrbitY = false
+    var invertZoom = false
+
+    // MARK: The sea
+
+    /// Scales every wave in the game, on top of whatever the tide asks for.
+    ///
+    /// The solver and the water shader read the same amplitude out of the same
+    /// header, so this thins the surf that *erodes* by exactly as much as the
+    /// surf you can see — turning it down makes a calmer beach, not a beach
+    /// that lies about what the water is doing to it.
+    var surf: Double = 0.75
+
     // MARK: Photographs
     //
     // The model asks; the coordinator, which is the only thing that knows about
@@ -412,6 +463,13 @@ final class GameModel {
                           showAdvancedReadouts: showAdvancedReadouts,
                           daySpeed: daySpeed,
                           cloudCover: cloudCover,
+                          snapToGrid: snapToGrid,
+                          snapSpacing: snapSpacing,
+                          straightStrokes: straightStrokes,
+                          invertOrbitX: invertOrbitX,
+                          invertOrbitY: invertOrbitY,
+                          invertZoom: invertZoom,
+                          surf: surf,
                           campaignProgress: campaignProgress)
     }
 
@@ -431,6 +489,13 @@ final class GameModel {
         showAdvancedReadouts = p.showAdvancedReadouts
         daySpeed = p.daySpeed
         cloudCover = p.cloudCover
+        snapToGrid = p.snapToGrid
+        snapSpacing = p.snapSpacing
+        straightStrokes = p.straightStrokes
+        invertOrbitX = p.invertOrbitX
+        invertOrbitY = p.invertOrbitY
+        invertZoom = p.invertZoom
+        surf = p.surf
         campaignProgress = p.campaignProgress
     }
 
@@ -700,7 +765,11 @@ final class GameModel {
         var env = SimulationEnvironment()
         env.time = waveTime
         env.seaBase = currentSeaLevel
-        env.waveAmplitude = waveAmplitude
+        // One multiplier, applied once, at the only place the amplitude leaves
+        // the model. Everything downstream — the solver's erosion, the water
+        // surface, the surf on the audio bed — reads it from here, so they
+        // cannot disagree about how big the sea is.
+        env.waveAmplitude = waveAmplitude * max(surf, 0)
         env.erosion = erosionStrength
         env.sunDrying = Double(atmosphere.dryingRate)
         return env
@@ -708,27 +777,89 @@ final class GameModel {
 
     // MARK: - Strokes
 
+    /// Put a sample where the drafting settings say it should be.
+    ///
+    /// Order matters and it is this way round. The direction lock is applied
+    /// first, against the *unsnapped* anchor, so the angle is the angle the hand
+    /// actually asked for; the grid is applied afterwards, to the result. Snap
+    /// first and short strokes would quantise to the lattice before there was
+    /// enough travel to tell which of the eight directions was meant, and the
+    /// tool would jump between diagonals under a slow hand.
+    ///
+    /// Only X and Z move. The height comes off the GPU pick and belongs to the
+    /// sand; moving it would put the brush somewhere the beach is not.
+    private func drafted(_ sample: StrokeSample, anchoredTo anchor: StrokeSample?) -> StrokeSample {
+        guard snapToGrid || straightStrokes else { return sample }
+
+        var out = sample
+        var p = SIMD2<Float>(sample.world.x, sample.world.z)
+
+        if straightStrokes, let anchor {
+            let origin = SIMD2<Float>(anchor.world.x, anchor.world.z)
+            let delta = p - origin
+            let reach = length(delta)
+            // Below a couple of centimetres the angle is noise, and rounding
+            // noise to the nearest 45° is how a tool develops a twitch.
+            if reach > 0.02 {
+                let angle = atan2(delta.y, delta.x)
+                let step = Self.strokeDirectionStep
+                let locked = (angle / step).rounded() * step
+                p = origin + SIMD2<Float>(cos(locked), sin(locked)) * reach
+            } else {
+                p = origin
+            }
+        }
+
+        if snapToGrid {
+            let pitch = Float(max(snapSpacing, 0.05))
+            p = SIMD2<Float>((p.x / pitch).rounded(), (p.y / pitch).rounded()) * pitch
+        }
+
+        out.world.x = p.x
+        out.world.z = p.y
+        return out
+    }
+
+    /// Where the tool will actually land, for a raw world position off the pick.
+    ///
+    /// The cursor ring and the mould ghost are drawn from this rather than from
+    /// the pick itself. Without it, drafting is done blind: the ring sits under
+    /// the finger while the sand changes somewhere else on the locked line, and
+    /// the whole point of a grid is being able to *see* where the next thing
+    /// goes before committing to it.
+    func draftedPosition(_ world: SIMD3<Float>) -> SIMD3<Float> {
+        let sample = StrokeSample(world: world, moisture: 0, packing: 0,
+                                  sandDepth: 0, bedrock: 0)
+        return drafted(sample, anchoredTo: isStroking ? strokeStart : nil).world
+    }
+
     func beginStroke(_ sample: StrokeSample) {
         guard phase != .briefing, phase != .reckoning else { return }
+        // The first point is snapped to the grid but has no anchor to be
+        // straight against — it *is* the anchor. Snapping it is what puts the
+        // whole stroke on the lattice rather than merely parallel to it.
+        let placed = drafted(sample, anchoredTo: nil)
+
         isStroking = true
-        strokeStart = sample
-        strokeCurrent = sample
-        strokePrevious = sample
+        strokeStart = placed
+        strokeCurrent = placed
+        strokePrevious = placed
         lastAppliedPosition = nil
         strokeElapsed = 0
-        referenceHeight = sample.world.y
+        referenceHeight = placed.world.y
 
         if tool.id == .mould {
             mouldFillProgress = 0
             mouldCharge = (0, false)
         } else if tool.id == .place {
-            place(at: sample)
+            place(at: placed)
             isStroking = false
         }
     }
 
-    func continueStroke(_ sample: StrokeSample) {
+    func continueStroke(_ rawSample: StrokeSample) {
         guard isStroking else { return }
+        let sample = drafted(rawSample, anchoredTo: strokeStart)
         strokePrevious = strokeCurrent
         strokeCurrent = sample
 

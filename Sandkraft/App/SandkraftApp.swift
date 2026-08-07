@@ -108,6 +108,18 @@ struct SandkraftCommands: Commands {
                                                 object: BrushShape.square.rawValue)
             }
             .keyboardShortcut("b", modifiers: [.command, .shift])
+
+            Divider()
+            // The two drafting switches, on the keys every drawing program on
+            // this platform has put them on for thirty years.
+            Button("Straight strokes") {
+                NotificationCenter.default.post(name: .skToggleStraightStrokes, object: nil)
+            }
+            .keyboardShortcut("\\", modifiers: [.command])
+            Button("Snap to a grid") {
+                NotificationCenter.default.post(name: .skToggleSnapToGrid, object: nil)
+            }
+            .keyboardShortcut("'", modifiers: [.command])
         }
 
         CommandMenu("Beach") {
@@ -168,6 +180,8 @@ extension Notification.Name {
     static let skOpenBeach = Notification.Name("sk.openBeach")
     static let skTogglePause = Notification.Name("sk.togglePause")
     static let skToggleChrome = Notification.Name("sk.toggleChrome")
+    static let skToggleSnapToGrid = Notification.Name("sk.toggleSnapToGrid")
+    static let skToggleStraightStrokes = Notification.Name("sk.toggleStraightStrokes")
     static let skResetBeach = Notification.Name("sk.resetBeach")
     static let skCycleLook = Notification.Name("sk.cycleLook")
     static let skShowFieldNotes = Notification.Name("sk.showFieldNotes")

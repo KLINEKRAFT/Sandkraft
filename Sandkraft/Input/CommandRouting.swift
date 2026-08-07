@@ -52,6 +52,12 @@ struct CommandRouting: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .skTogglePause)) { _ in
                 model.isPaused.toggle()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .skToggleSnapToGrid)) { _ in
+                model.snapToGrid.toggle()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .skToggleStraightStrokes)) { _ in
+                model.straightStrokes.toggle()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .skResetBeach)) { _ in
                 coordinator.resetBeach()
             }

@@ -258,6 +258,10 @@ struct LookSwatch: View {
 struct SettingsView: View {
     @Bindable var model: GameModel
     @State private var confirmingReset = false
+    /// Its own, rather than the one `PlaySheetContent` holds: `dismiss` reaches
+    /// the nearest presentation, and this view needs to close the sheet it is
+    /// inside from a button halfway down a Form.
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Form {
@@ -328,9 +332,80 @@ struct SettingsView: View {
                     .foregroundStyle(Palette.secondaryText)
             }
 
+            Section("Drafting") {
+                Toggle("Straight strokes", isOn: $model.straightStrokes)
+                Text("""
+                     Locks a stroke to one of eight directions from wherever it \
+                     started, so a wall, a trench or a row of turrets comes out \
+                     straight. Also squares a mould to fifteen-degree turns.
+                     """)
+                    .font(.skCaption)
+                    .foregroundStyle(Palette.secondaryText)
+
+                Toggle("Snap to a grid", isOn: $model.snapToGrid)
+                if model.snapToGrid {
+                    Picker("Spacing", selection: $model.snapSpacing) {
+                        Text("10 cm").tag(0.1)
+                        Text("25 cm").tag(0.25)
+                        Text("50 cm").tag(0.5)
+                        Text("1 m").tag(1.0)
+                    }
+                }
+                Text("""
+                     Straight strokes make a wall straight; the grid makes it \
+                     land somewhere repeatable, so two walls built five minutes \
+                     apart line up. Both are off by default — sand slumps, and \
+                     most of the time that is the point.
+                     """)
+                    .font(.skCaption)
+                    .foregroundStyle(Palette.secondaryText)
+            }
+
+            Section("The sea") {
+                // The label is the number, not the fraction. "0.75" means
+                // nothing; "three quarters of the swell this tide asks for" is
+                // what the slider actually does.
+                LabeledContent("Surf", value: "\(Int(model.surf * 100))%")
+                Slider(value: $model.surf, in: 0...1.5, step: 0.05)
+                    .accessibilityLabel("Surf")
+                    .accessibilityValue("\(Int(model.surf * 100)) percent")
+                Text("""
+                     Scales every wave, on top of whatever the tide asks for. \
+                     The water you see is the water that erodes, so turning this \
+                     down really does make a calmer beach rather than a beach \
+                     that lies about what the sea is doing to it. At zero the \
+                     sea is glass and nothing is taken away.
+                     """)
+                    .font(.skCaption)
+                    .foregroundStyle(Palette.secondaryText)
+            }
+
+            Section("Camera") {
+                Toggle("Invert orbit — left and right", isOn: $model.invertOrbitX)
+                Toggle("Invert orbit — up and down", isOn: $model.invertOrbitY)
+                Toggle("Invert zoom", isOn: $model.invertZoom)
+                Text("""
+                     Which way a drag turns the world is not a thing with a \
+                     right answer, and the answer is often different on a \
+                     trackpad and a mouse. Try them.
+                     """)
+                    .font(.skCaption)
+                    .foregroundStyle(Palette.secondaryText)
+            }
+
             Section("This beach") {
-                Button("Save this beach…") { model.saveBeach() }
-                Button("Open a beach…") { model.openBeach() }
+                // Both of these close Settings on the way out, and they have to:
+                // the file panel they ask for cannot be put up while this sheet
+                // is still on screen. See `PlayView.present(_:)` — the request
+                // is queued and goes up as this sheet finishes leaving.
+                Button("Save this beach…") {
+                    model.saveBeach()
+                    dismiss()
+                }
+                Button("Open a beach…") {
+                    model.openBeach()
+                    dismiss()
+                }
                 Text("""
                      A saved beach keeps the sand exactly as it stands, along \
                      with the adornments, the look and the time of day. It \
@@ -530,7 +605,9 @@ struct ControlsReference: View {
             Row(keys: "]", what: "Bigger — one detent, about 15%"),
             Row(keys: "[", what: "Smaller"),
             Row(keys: "⌘B", what: "Round footprint"),
-            Row(keys: "⇧⌘B", what: "Square footprint")
+            Row(keys: "⇧⌘B", what: "Square footprint"),
+            Row(keys: "⌘\\", what: "Straight strokes — lock to eight directions"),
+            Row(keys: "⌘'", what: "Snap to a grid")
         ]))
 
         all.append(Block(title: "The beach", rows: [

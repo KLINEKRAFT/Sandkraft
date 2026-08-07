@@ -43,6 +43,21 @@ struct StoredPreferences: Equatable, Sendable {
     var daySpeed: DaySpeed = .gentle
     var cloudCover: Double = 0.45
 
+    /// Drafting. Both off by default — a game about a material that slumps
+    /// should not open with a grid switched on.
+    var snapToGrid: Bool = false
+    var snapSpacing: Double = 0.5
+    var straightStrokes: Bool = false
+
+    /// Which way a drag turns the world. Not a thing with a right answer, and
+    /// emphatically a thing to remember once somebody has decided.
+    var invertOrbitX: Bool = false
+    var invertOrbitY: Bool = false
+    var invertZoom: Bool = false
+
+    /// How big the sea is, over everything the tide already asks for.
+    var surf: Double = 0.75
+
     var campaignProgress: Int = 1
 }
 
@@ -71,6 +86,13 @@ enum Preferences {
         static let daySpeed = "sk.daySpeed"
         static let cloud = "sk.cloudCover"
         static let campaign = "sk.campaignProgress"
+        static let snapToGrid = "sk.snapToGrid"
+        static let snapSpacing = "sk.snapSpacing"
+        static let straightStrokes = "sk.straightStrokes"
+        static let invertOrbitX = "sk.invertOrbitX"
+        static let invertOrbitY = "sk.invertOrbitY"
+        static let invertZoom = "sk.invertZoom"
+        static let surf = "sk.surf"
     }
 
     // `object(forKey:)` rather than `double(forKey:)` or `bool(forKey:)`,
@@ -117,6 +139,14 @@ enum Preferences {
         p.showAdvancedReadouts = storedBool(Key.advanced, p.showAdvancedReadouts)
         p.campaignProgress = storedInt(Key.campaign) ?? p.campaignProgress
 
+        p.snapToGrid = storedBool(Key.snapToGrid, p.snapToGrid)
+        p.snapSpacing = storedDouble(Key.snapSpacing, p.snapSpacing)
+        p.straightStrokes = storedBool(Key.straightStrokes, p.straightStrokes)
+        p.invertOrbitX = storedBool(Key.invertOrbitX, p.invertOrbitX)
+        p.invertOrbitY = storedBool(Key.invertOrbitY, p.invertOrbitY)
+        p.invertZoom = storedBool(Key.invertZoom, p.invertZoom)
+        p.surf = storedDouble(Key.surf, p.surf)
+
         // A stored value is not automatically a sane one. The defaults file is
         // editable, and a future build can narrow a range underneath a number
         // that was perfectly legal when it was written. Clamping on the way in
@@ -124,6 +154,10 @@ enum Preferences {
         p.brushScale = min(max(p.brushScale, 0.45), 2.0)
         p.cloudCover = min(max(p.cloudCover, 0.0), 1.0)
         p.campaignProgress = min(max(p.campaignProgress, 1), Tide.campaign.count)
+        // A pitch of zero would divide by nothing and put the whole beach on one
+        // texel; a pitch bigger than the brush is a grid you cannot draw on.
+        p.snapSpacing = min(max(p.snapSpacing, 0.1), 2.0)
+        p.surf = min(max(p.surf, 0.0), 1.5)
 
         return p
     }
@@ -145,6 +179,13 @@ enum Preferences {
         store.set(p.reducedMotion, forKey: Key.reducedMotion)
         store.set(p.showAdvancedReadouts, forKey: Key.advanced)
         store.set(p.campaignProgress, forKey: Key.campaign)
+        store.set(p.snapToGrid, forKey: Key.snapToGrid)
+        store.set(p.snapSpacing, forKey: Key.snapSpacing)
+        store.set(p.straightStrokes, forKey: Key.straightStrokes)
+        store.set(p.invertOrbitX, forKey: Key.invertOrbitX)
+        store.set(p.invertOrbitY, forKey: Key.invertOrbitY)
+        store.set(p.invertZoom, forKey: Key.invertZoom)
+        store.set(p.surf, forKey: Key.surf)
     }
 
     /// Back to a clean slate, campaign included. Wired to a button in Settings
@@ -152,7 +193,9 @@ enum Preferences {
     static func reset() {
         let keys = [Key.quality, Key.look, Key.brushScale, Key.brushShape,
                     Key.haptics, Key.sound, Key.music, Key.reducedMotion,
-                    Key.advanced, Key.daySpeed, Key.cloud, Key.campaign]
+                    Key.advanced, Key.daySpeed, Key.cloud, Key.campaign,
+                    Key.snapToGrid, Key.snapSpacing, Key.straightStrokes,
+                    Key.invertOrbitX, Key.invertOrbitY, Key.invertZoom, Key.surf]
         for key in keys {
             store.removeObject(forKey: key)
         }
