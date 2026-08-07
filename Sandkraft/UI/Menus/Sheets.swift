@@ -262,188 +262,28 @@ struct SettingsView: View {
     /// the nearest presentation, and this view needs to close the sheet it is
     /// inside from a button halfway down a Form.
     @Environment(\.dismiss) private var dismiss
+    // One computed property per section, for the same reason `PlayView.body` is
+    // built in stages: Swift type-checks a whole expression at once, against a
+    // wall-clock budget, and a `Form` holding nine sections of bindings,
+    // ternaries and interpolated strings is one expression. This screen went
+    // from six sections to nine in a single commit and was heading the same way
+    // PlayView already went — failing to compile on a slower machine while
+    // passing on a faster one.
+    //
+    // Nine children is also exactly at `ViewBuilder`'s ten-child limit. A tenth
+    // section wants a `Group`, not a squeeze.
 
     var body: some View {
         Form {
-            Section("The day") {
-                Picker("Clock", selection: $model.daySpeed) {
-                    ForEach(DaySpeed.allCases) { speed in
-                        Text(speed.title).tag(speed)
-                    }
-                }
-                Text(model.daySpeed.subtitle)
-                    .font(.skCaption)
-                    .foregroundStyle(Palette.secondaryText)
-
-                VStack(alignment: .leading) {
-                    HStack {
-                        Text("Time of day")
-                        Spacer()
-                        Text(SunPath.clockText(dayFraction: model.dayFraction))
-                            .font(.skNumeric(13))
-                            .foregroundStyle(Palette.secondaryText)
-                    }
-                    Slider(value: $model.dayFraction, in: 0...1).tint(Palette.accent)
-                }
-
-                VStack(alignment: .leading) {
-                    HStack {
-                        Text("Cloud")
-                        Spacer()
-                        Text("\(Int(model.cloudCover * 100))%")
-                            .font(.skNumeric(13))
-                            .foregroundStyle(Palette.secondaryText)
-                    }
-                    Slider(value: $model.cloudCover, in: 0...1).tint(Palette.accent)
-                }
-            }
-
-            Section("Feel") {
-                Toggle("Haptics", isOn: $model.hapticsEnabled)
-                Toggle("Sound", isOn: $model.soundEnabled)
-                Toggle("Advanced readouts", isOn: $model.showAdvancedReadouts)
-                if model.showAdvancedReadouts {
-                    LabeledContent("Frame time", value: model.frameTimeDescription)
-                    LabeledContent("Sand in play", value: String(format: "%.1f m³", model.metrics.totalVolume))
-                    LabeledContent("Packed", value: String(format: "%.1f m³", model.metrics.packedVolume))
-                    LabeledContent("Wetted", value: String(format: "%.0f m²", model.metrics.wettedArea))
-                }
-            }
-
-            Section("Performance") {
-                Picker("Quality", selection: $model.qualityTier) {
-                    ForEach(QualityTier.allCases) { tier in
-                        Text(tier.title).tag(tier)
-                    }
-                }
-                Text(model.qualityTier.note)
-                    .font(.skCaption)
-                    .foregroundStyle(Palette.secondaryText)
-                LabeledContent("Approximate memory",
-                               value: "\(model.qualityTier.approximateMemoryMB) MB")
-                    .font(.skCaption)
-                LabeledContent("Beach mesh", value: model.qualityTier.meshDescription)
-                    .font(.skCaption)
-                Text("""
-                     Changing quality rebuilds the simulation, which means laying \
-                     down a fresh beach. Finish what you are working on first.
-                     """)
-                    .font(.skCaption)
-                    .foregroundStyle(Palette.secondaryText)
-            }
-
-            Section("Drafting") {
-                Toggle("Straight strokes", isOn: $model.straightStrokes)
-                Text("""
-                     Locks a stroke to one of eight directions from wherever it \
-                     started, so a wall, a trench or a row of turrets comes out \
-                     straight. Also squares a mould to fifteen-degree turns.
-                     """)
-                    .font(.skCaption)
-                    .foregroundStyle(Palette.secondaryText)
-
-                Toggle("Snap to a grid", isOn: $model.snapToGrid)
-                if model.snapToGrid {
-                    Picker("Spacing", selection: $model.snapSpacing) {
-                        Text("10 cm").tag(0.1)
-                        Text("25 cm").tag(0.25)
-                        Text("50 cm").tag(0.5)
-                        Text("1 m").tag(1.0)
-                    }
-                }
-                Text("""
-                     Straight strokes make a wall straight; the grid makes it \
-                     land somewhere repeatable, so two walls built five minutes \
-                     apart line up. Both are off by default — sand slumps, and \
-                     most of the time that is the point.
-                     """)
-                    .font(.skCaption)
-                    .foregroundStyle(Palette.secondaryText)
-            }
-
-            Section("The sea") {
-                // The label is the number, not the fraction. "0.75" means
-                // nothing; "three quarters of the swell this tide asks for" is
-                // what the slider actually does.
-                LabeledContent("Surf", value: "\(Int(model.surf * 100))%")
-                Slider(value: $model.surf, in: 0...1.5, step: 0.05)
-                    .accessibilityLabel("Surf")
-                    .accessibilityValue("\(Int(model.surf * 100)) percent")
-                Text("""
-                     Scales every wave, on top of whatever the tide asks for. \
-                     The water you see is the water that erodes, so turning this \
-                     down really does make a calmer beach rather than a beach \
-                     that lies about what the sea is doing to it. At zero the \
-                     sea is glass and nothing is taken away.
-                     """)
-                    .font(.skCaption)
-                    .foregroundStyle(Palette.secondaryText)
-            }
-
-            Section("Camera") {
-                Toggle("Invert orbit — left and right", isOn: $model.invertOrbitX)
-                Toggle("Invert orbit — up and down", isOn: $model.invertOrbitY)
-                Toggle("Invert zoom", isOn: $model.invertZoom)
-                Text("""
-                     Which way a drag turns the world is not a thing with a \
-                     right answer, and the answer is often different on a \
-                     trackpad and a mouse. Try them.
-                     """)
-                    .font(.skCaption)
-                    .foregroundStyle(Palette.secondaryText)
-            }
-
-            Section("This beach") {
-                // Both of these close Settings on the way out, and they have to:
-                // the file panel they ask for cannot be put up while this sheet
-                // is still on screen. See `PlayView.present(_:)` — the request
-                // is queued and goes up as this sheet finishes leaving.
-                Button("Save this beach…") {
-                    model.saveBeach()
-                    dismiss()
-                }
-                Button("Open a beach…") {
-                    model.openBeach()
-                    dismiss()
-                }
-                Text("""
-                     A saved beach keeps the sand exactly as it stands, along \
-                     with the adornments, the look and the time of day. It \
-                     reopens as a sandbox, and only at the quality it was saved \
-                     at — the field is a different size at every tier.
-                     """)
-                    .font(.skCaption)
-                    .foregroundStyle(Palette.secondaryText)
-                Text("""
-                     The beach in front of you is also kept automatically, every \
-                     half minute that something has changed on it, and offered \
-                     back as Continue the next time you launch. That slot holds \
-                     one beach and it is always the last one — it is a way not to \
-                     lose an afternoon, not a way to keep several.
-                     """)
-                    .font(.skCaption)
-                    .foregroundStyle(Palette.secondaryText)
-            }
-
-            Section("Stored") {
-                LabeledContent("Campaign", value: "tide \(model.campaignProgress) unlocked")
-                    .font(.skCaption)
-                Text("""
-                     Everything on this screen is remembered between launches, \
-                     along with your brush and which tides you have reached.
-                     """)
-                    .font(.skCaption)
-                    .foregroundStyle(Palette.secondaryText)
-
-                Button("Reset settings and progress", role: .destructive) {
-                    confirmingReset = true
-                }
-            }
-
-            Section("About") {
-                LabeledContent("Simulation", value: "\(model.qualityTier.simResolution)² heightfield")
-                LabeledContent("Solver", value: "\(model.qualityTier.substeps) substeps per frame")
-            }
+            daySection
+            feelSection
+            performanceSection
+            draftingSection
+            seaSection
+            cameraSection
+            beachSection
+            storedSection
+            aboutSection
         }
         .confirmationDialog("Reset settings and progress?",
                             isPresented: $confirmingReset,
@@ -470,6 +310,209 @@ struct SettingsView: View {
         #if os(macOS)
         .formStyle(.grouped)
         #endif
+    }
+
+    private var daySection: some View {
+        Section("The day") {
+            Picker("Clock", selection: $model.daySpeed) {
+                ForEach(DaySpeed.allCases) { speed in
+                    Text(speed.title).tag(speed)
+                }
+            }
+            Text(model.daySpeed.subtitle)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
+
+            VStack(alignment: .leading) {
+                HStack {
+                    Text("Time of day")
+                    Spacer()
+                    Text(SunPath.clockText(dayFraction: model.dayFraction))
+                        .font(.skNumeric(13))
+                        .foregroundStyle(Palette.secondaryText)
+                }
+                Slider(value: $model.dayFraction, in: 0...1).tint(Palette.accent)
+            }
+
+            VStack(alignment: .leading) {
+                HStack {
+                    Text("Cloud")
+                    Spacer()
+                    Text("\(Int(model.cloudCover * 100))%")
+                        .font(.skNumeric(13))
+                        .foregroundStyle(Palette.secondaryText)
+                }
+                Slider(value: $model.cloudCover, in: 0...1).tint(Palette.accent)
+            }
+        }
+    }
+
+    private var feelSection: some View {
+        Section("Feel") {
+            Toggle("Haptics", isOn: $model.hapticsEnabled)
+            Toggle("Sound", isOn: $model.soundEnabled)
+            Toggle("Advanced readouts", isOn: $model.showAdvancedReadouts)
+            if model.showAdvancedReadouts {
+                LabeledContent("Frame time", value: model.frameTimeDescription)
+                LabeledContent("Sand in play", value: String(format: "%.1f m³", model.metrics.totalVolume))
+                LabeledContent("Packed", value: String(format: "%.1f m³", model.metrics.packedVolume))
+                LabeledContent("Wetted", value: String(format: "%.0f m²", model.metrics.wettedArea))
+            }
+        }
+    }
+
+    private var performanceSection: some View {
+        Section("Performance") {
+            Picker("Quality", selection: $model.qualityTier) {
+                ForEach(QualityTier.allCases) { tier in
+                    Text(tier.title).tag(tier)
+                }
+            }
+            Text(model.qualityTier.note)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
+            LabeledContent("Approximate memory",
+                           value: "\(model.qualityTier.approximateMemoryMB) MB")
+                .font(.skCaption)
+            LabeledContent("Beach mesh", value: model.qualityTier.meshDescription)
+                .font(.skCaption)
+            Text("""
+                 Changing quality rebuilds the simulation, which means laying \
+                 down a fresh beach. Finish what you are working on first.
+                 """)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
+        }
+    }
+
+    private var draftingSection: some View {
+        Section("Drafting") {
+            Toggle("Straight strokes", isOn: $model.straightStrokes)
+            Text("""
+                 Locks a stroke to one of eight directions from wherever it \
+                 started, so a wall, a trench or a row of turrets comes out \
+                 straight. Also squares a mould to fifteen-degree turns.
+                 """)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
+
+            Toggle("Snap to a grid", isOn: $model.snapToGrid)
+            if model.snapToGrid {
+                Picker("Spacing", selection: $model.snapSpacing) {
+                    // Spelled `as Double` rather than left to inference. The
+                    // selection is a `Binding<Double>` and a bare `0.1` would
+                    // almost certainly resolve to one — but `tag` is generic over
+                    // `Hashable`, so "almost certainly" is the type-checker doing
+                    // work it does not need to do, four times, in a file that has
+                    // already run out of budget once.
+                    Text("10 cm").tag(0.1 as Double)
+                    Text("25 cm").tag(0.25 as Double)
+                    Text("50 cm").tag(0.5 as Double)
+                    Text("1 m").tag(1.0 as Double)
+                }
+            }
+            Text("""
+                 Straight strokes make a wall straight; the grid makes it \
+                 land somewhere repeatable, so two walls built five minutes \
+                 apart line up. Both are off by default — sand slumps, and \
+                 most of the time that is the point.
+                 """)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
+        }
+    }
+
+    private var seaSection: some View {
+        Section("The sea") {
+            // The label is the number, not the fraction. "0.85" means nothing;
+            // "most of the swell this tide asks for" is what the slider does.
+            LabeledContent("Surf", value: "\(Int(model.surf * 100))%")
+            Slider(value: $model.surf, in: 0...1.5, step: 0.05)
+                .accessibilityLabel("Surf")
+                .accessibilityValue("\(Int(model.surf * 100)) percent")
+            Text("""
+                 Scales every wave, on top of whatever the tide asks for. \
+                 The water you see is the water that erodes, so turning this \
+                 down really does make a calmer beach rather than a beach \
+                 that lies about what the sea is doing to it. At zero the \
+                 sea is glass and nothing is taken away.
+                 """)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
+        }
+    }
+
+    private var cameraSection: some View {
+        Section("Camera") {
+            Toggle("Invert orbit — left and right", isOn: $model.invertOrbitX)
+            Toggle("Invert orbit — up and down", isOn: $model.invertOrbitY)
+            Toggle("Invert zoom", isOn: $model.invertZoom)
+            Text("""
+                 Which way a drag turns the world is not a thing with a \
+                 right answer, and the answer is often different on a \
+                 trackpad and a mouse. Try them.
+                 """)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
+        }
+    }
+
+    private var beachSection: some View {
+        Section("This beach") {
+            // Both of these close Settings on the way out, and they have to:
+            // the file panel they ask for cannot be put up while this sheet
+            // is still on screen. See `PlayView.present(_:)` — the request
+            // is queued and goes up as this sheet finishes leaving.
+            Button("Save this beach…") {
+                model.saveBeach()
+                dismiss()
+            }
+            Button("Open a beach…") {
+                model.openBeach()
+                dismiss()
+            }
+            Text("""
+                 A saved beach keeps the sand exactly as it stands, along \
+                 with the adornments, the look and the time of day. It \
+                 reopens as a sandbox, and only at the quality it was saved \
+                 at — the field is a different size at every tier.
+                 """)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
+            Text("""
+                 The beach in front of you is also kept automatically, every \
+                 half minute that something has changed on it, and offered \
+                 back as Continue the next time you launch. That slot holds \
+                 one beach and it is always the last one — it is a way not to \
+                 lose an afternoon, not a way to keep several.
+                 """)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
+        }
+    }
+
+    private var storedSection: some View {
+        Section("Stored") {
+            LabeledContent("Campaign", value: "tide \(model.campaignProgress) unlocked")
+                .font(.skCaption)
+            Text("""
+                 Everything on this screen is remembered between launches, \
+                 along with your brush and which tides you have reached.
+                 """)
+                .font(.skCaption)
+                .foregroundStyle(Palette.secondaryText)
+
+            Button("Reset settings and progress", role: .destructive) {
+                confirmingReset = true
+            }
+        }
+    }
+
+    private var aboutSection: some View {
+        Section("About") {
+            LabeledContent("Simulation", value: "\(model.qualityTier.simResolution)² heightfield")
+            LabeledContent("Solver", value: "\(model.qualityTier.substeps) substeps per frame")
+        }
     }
 }
 
