@@ -85,6 +85,41 @@ between the solver and the renderer — which removes a whole category of "why i
 the water one texel off the sand" bug. The weights are smoothstepped, which gives
 C¹ continuity and stops the reconstructed normal showing the texel grid.
 
+**The hardpack is baked, not derived.** `sk_bedrock` is nine value-noise
+evaluations and two sines describing ground that never moves, and almost
+everything asked for it several times over: the terrain fragment differenced it
+four times to rebuild the macro normal, the water fragment five, and the solver
+nine times per texel per substep. It is now baked once into a 1024² RG32Float
+table — hardpack in `.r`, the loose bed in `.g` — covering ±40 m, which is the
+48 m simulated square plus every headland with room to spare.
+
+Three things about that table are load-bearing:
+
+- **The extent is a compile-time constant, not a uniform.** `SK_BEDROCK_EXTENT`
+  lives in Common.h and never crosses into Swift. Nothing about the table varies
+  per frame, so carrying it in `SKFrameUniforms` would widen a struct that has to
+  keep its layout identical on both sides of the bridge in order to ship a
+  number that cannot change. Swift supplies a square texture and nothing else.
+- **The grid is vertex-centred.** Texel 0 sits exactly on −40 m and texel N−1
+  exactly on +40 m, so a lookup on the border lands on a stored texel with a zero
+  interpolation weight. Past ±40 m the shaders fall back to the analytic pair,
+  and because both sides are the same function of the same position the join is
+  under a micron — the float32 round trip of a value a few metres tall. Space the
+  table the obvious way, texel centres at (i+0.5)/N, and the border falls halfway
+  between two samples where the interpolation error is worst, turning a seam
+  nobody can measure into a millimetre step you can watch the sun catch.
+- **The weights are smoothstepped**, exactly as `sk_sandSmooth` smoothsteps its
+  own, and for exactly the same reason: the terrain fragment rebuilds its macro
+  normal by differencing this function, and plain bilinear — whose gradient is
+  piecewise constant — would print the table's own texel grid onto the beach.
+
+The solver's first invariant survives because the lookup is still a pure function
+of world position: when a neighbouring cell runs its own step and looks back, it
+rebuilds the identical world position and reads the identical bits, so the pair
+transfer stays exactly antisymmetric. The initial state and the pristine profile
+are baked from the table too, rather than from the analytic pair, so the beach is
+never a hair out of step with the ground it stands on.
+
 **Water composites by hand.** The fragment samples the already-rendered opaque
 scene and returns the mix, rather than relying on a blend state. That costs one
 full-resolution copy and buys refraction, correct depth absorption, and a swash
@@ -149,8 +184,8 @@ Written down rather than left to be discovered:
   needs either a batched pick kernel or a small CPU mirror of the field.
 - **Rising mode has no end condition** beyond the water eventually covering
   everything.
-- **`sk_bedrock` is rebuilt per pixel.** `terrain_fragment` central-differences
-  it four times to reconstruct the macro normal, and each call is nine value
-  noise evaluations plus two sines — roughly 36 noise lookups per pixel for
-  terrain that never changes. The water fragment pays it five times. Baking it
-  into a lookup texture is the largest single frame-time win left.
+- **The bedrock table stops at ±40 m.** Beyond it the skirt and the open sea go
+  back to evaluating `sk_bedrock` per pixel. That is most of the distant beach,
+  and widening the table to cover the full ±340 m skirt would cost far more
+  memory than the picture out there is worth — but it does mean the far field is
+  still the most expensive part of the frame.

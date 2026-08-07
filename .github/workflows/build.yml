@@ -66,7 +66,7 @@ jobs:
           LIB=$(find ~/Library/Developer/Xcode/DerivedData -name 'default.metallib' | head -1)
           if [ -n "$LIB" ]; then
             echo "metallib: $LIB"
-            strings "$LIB" | grep -E '^(sim_|metrics_|deposit_|terrain_|water_|sky_|post_|particle_|prop_)' | sort -u
+            strings "$LIB" | grep -E '^(sim_|metrics_|deposit_|bedrock_|terrain_|water_|sky_|post_|particle_|prop_)' | sort -u
           else
             echo "No default.metallib found — the shaders may not be in the target."
             exit 1

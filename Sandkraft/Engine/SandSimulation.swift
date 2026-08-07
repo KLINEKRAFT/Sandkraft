@@ -63,6 +63,18 @@ final class SandSimulation {
     /// The simulated square, in metres. Matches `SK_DOMAIN` in Common.h.
     static let domain = SIMD4<Float>(-24, -24, 48, 48)
 
+    /// Edge length of the baked hardpack table.
+    ///
+    /// The *extent* it covers — ±40 m — is deliberately not here. It lives in
+    /// Common.h as `SK_BEDROCK_EXTENT` and never crosses into Swift, because
+    /// nothing on this side has an opinion about it: `bedrock_bake` reads the
+    /// constant, sizes its grid from the texture it was handed, and the sampler
+    /// inverts the same arithmetic. Swift's whole contribution is a square
+    /// texture. 1024² of RG32Float is 8 MB — a little over one sand field at
+    /// Maximum — and unlike the sand it does not grow with the tier, because the
+    /// shore does not get bigger when the simulation does.
+    static let bedrockResolution = 1024
+
     let resolution: Int
     var cellSize: Float { Self.domain.z / Float(resolution) }
     var cellArea: Float { cellSize * cellSize }
@@ -75,6 +87,11 @@ final class SandSimulation {
     private var sandBack: MTLTexture
     private(set) var pristine: MTLTexture
     private(set) var ambientOcclusion: MTLTexture
+
+    /// The hardpack and the bed last night's tide left, baked. Static for the
+    /// life of the simulation, and read by very nearly every pass in the frame —
+    /// the renderer binds it alongside `sand`.
+    private(set) var bedrock: MTLTexture
     private var deposit: MTLTexture
     private var depositAccumulator: MTLBuffer
 
@@ -84,6 +101,7 @@ final class SandSimulation {
 
     // MARK: Pipelines
 
+    private let pBedrockBake: MTLComputePipelineState
     private let pInit: MTLComputePipelineState
     private let pPristine: MTLComputePipelineState
     private let pStep: MTLComputePipelineState
@@ -180,12 +198,16 @@ final class SandSimulation {
                                            format: .r8Unorm, usage: field, label: "sand.ao"),
               let dep = context.makeTexture(width: res, height: res,
                                             format: .rg32Float, usage: field, label: "sand.deposit"),
+              let bed = context.makeTexture(width: Self.bedrockResolution,
+                                            height: Self.bedrockResolution,
+                                            format: .rg32Float, usage: field, label: "terrain.bedrock"),
               let acc = context.makeBuffer(length: res * res * 2 * MemoryLayout<UInt32>.stride,
                                            storage: .storageModePrivate, label: "sand.depositAccumulator")
         else { throw MetalSetupError.noDevice }
 
         ambientOcclusion = ao
         deposit = dep
+        bedrock = bed
         depositAccumulator = acc
 
         let tgWide = (res + Self.metricThreadgroup.width - 1) / Self.metricThreadgroup.width
@@ -202,6 +224,7 @@ final class SandSimulation {
         metricsBuffer = metricsBuf
         pickBuffer = pickBuf
 
+        pBedrockBake    = try context.computePipeline("bedrock_bake")
         pInit           = try context.computePipeline("sim_init")
         pPristine       = try context.computePipeline("sim_pristine")
         pStep           = try context.computePipeline("sim_step")
@@ -220,6 +243,25 @@ final class SandSimulation {
                 throw MetalSetupError.noDevice
             }
             undoPool.append(t)
+        }
+
+        // Bake the hardpack now, on its own command buffer, rather than folding
+        // it into the first `reset`. `sim_init` reads this table, and so does
+        // every pass in every frame — a table that only becomes correct once a
+        // beach has been laid down is a trap for the next person to call
+        // `restore` or `raycast` before `reset`. Committed and not waited on:
+        // work on one queue runs in the order it was committed, and this is the
+        // same queue every frame goes down.
+        if let bake = context.commandQueue.makeCommandBuffer(),
+           let encoder = bake.makeComputeCommandEncoder() {
+            bake.label = "terrain.bedrock.bake"
+            encoder.label = "terrain.bedrock.bake"
+            encoder.setComputePipelineState(pBedrockBake)
+            encoder.setTexture(bedrock, index: 0)
+            context.dispatch(encoder, pipeline: pBedrockBake,
+                             width: bedrock.width, height: bedrock.height)
+            encoder.endEncoding()
+            bake.commit()
         }
     }
 
@@ -275,11 +317,13 @@ final class SandSimulation {
 
         encoder.setComputePipelineState(pInit)
         encoder.setTexture(sand, index: 0)
+        encoder.setTexture(bedrock, index: 1)
         encoder.setBytes(&u, length: MemoryLayout<SKSimUniforms>.stride, index: 0)
         context.dispatch(encoder, pipeline: pInit, width: resolution, height: resolution)
 
         encoder.setComputePipelineState(pPristine)
         encoder.setTexture(pristine, index: 0)
+        encoder.setTexture(bedrock, index: 1)
         encoder.setBytes(&u, length: MemoryLayout<SKSimUniforms>.stride, index: 0)
         context.dispatch(encoder, pipeline: pPristine, width: resolution, height: resolution)
 
@@ -346,6 +390,7 @@ final class SandSimulation {
             encoder.setTexture(sand, index: 0)
             encoder.setTexture(sandBack, index: 1)
             encoder.setTexture(deposit, index: 2)
+            encoder.setTexture(bedrock, index: 3)
             encoder.setBytes(&u, length: MemoryLayout<SKSimUniforms>.stride, index: 0)
             context.dispatch(encoder, pipeline: pStep, width: resolution, height: resolution)
 
@@ -366,6 +411,7 @@ final class SandSimulation {
         encoder.setComputePipelineState(pAO)
         encoder.setTexture(sand, index: 0)
         encoder.setTexture(ambientOcclusion, index: 1)
+        encoder.setTexture(bedrock, index: 2)
         encoder.setBytes(&u, length: MemoryLayout<SKSimUniforms>.stride, index: 0)
         context.dispatch(encoder, pipeline: pAO, width: ambientOcclusion.width, height: ambientOcclusion.height)
         encoder.endEncoding()
@@ -440,6 +486,7 @@ final class SandSimulation {
         encoder.label = "sim.pick"
         encoder.setComputePipelineState(pPick)
         encoder.setTexture(sand, index: 0)
+        encoder.setTexture(bedrock, index: 1)
         encoder.setBuffer(pickBuffer, offset: 0, index: 0)
         encoder.setBytes(&u, length: MemoryLayout<SKSimUniforms>.stride, index: 1)
         encoder.setBytes(&o, length: MemoryLayout<SIMD4<Float>>.stride, index: 2)

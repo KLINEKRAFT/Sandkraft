@@ -27,18 +27,53 @@
 
 #include "Common.h"
 
+// MARK: - The hardpack, baked
+//
+// Run once, when the simulation is built. Everything downstream — the solver,
+// the renderer, the particles, the pick ray — reads the table this fills rather
+// than re-deriving ground that has not moved since the world was made.
+
+/// Fill the bedrock lookup. `.r` is `sk_bedrock`, `.g` is `sk_sandBed`.
+///
+/// The grid is vertex-centred and must stay that way: texel 0 sits exactly on
+/// −SK_BEDROCK_EXTENT and texel N−1 exactly on +SK_BEDROCK_EXTENT, which is the
+/// arithmetic `sk_bedrockPair` inverts to find its taps. The two mappings are
+/// each other's inverse, and if one is changed the other has to move with it or
+/// the whole beach shifts half a texel sideways.
+kernel void bedrock_bake(texture2d<float, access::write> outLUT [[texture(0)]],
+                         uint2 gid                              [[thread_position_in_grid]]) {
+    const uint N = outLUT.get_width();
+    if (gid.x >= N || gid.y >= outLUT.get_height()) { return; }
+
+    // Written as a mix rather than as base-plus-stride so the two ends are
+    // exact: at gid 0 the interpolant is 0 and at gid N−1 it is 1, which puts
+    // the first and last samples on ±SK_BEDROCK_EXTENT to the bit. A stride of
+    // 2E/(N−1) accumulated instead would drift a few microns off the far edge,
+    // and the far edge is precisely where the analytic fallback has to meet it.
+    float2 p = mix(float2(-SK_BEDROCK_EXTENT), float2(SK_BEDROCK_EXTENT),
+                   float2(gid) / float(N - 1u));
+
+    outLUT.write(float4(sk_bedrock(p), sk_sandBed(p), 0.0f, 1.0f), gid);
+}
+
 // MARK: - Initial state
 
-kernel void sim_init(texture2d<float, access::write> outSand [[texture(0)]],
-                     constant SKSimUniforms &u              [[buffer(0)]],
-                     uint2 gid                              [[thread_position_in_grid]]) {
+kernel void sim_init(texture2d<float, access::write>  outSand    [[texture(0)]],
+                     texture2d<float>                 bedrockLUT [[texture(1)]],
+                     constant SKSimUniforms &u                   [[buffer(0)]],
+                     uint2 gid                                   [[thread_position_in_grid]]) {
     if (gid.x >= outSand.get_width() || gid.y >= outSand.get_height()) { return; }
 
     float2 uv = (float2(gid) + 0.5f) * u.texel;
     float2 wp = sk_uvToWorld(uv, u.domain);
 
-    float b     = sk_bedrock(wp);
-    float depth = sk_sandBed(wp);
+    // Read from the table rather than the analytic pair, even though this runs
+    // once: the pristine profile, the solver and the renderer all read the
+    // table, and an initial state built from a different arithmetic would start
+    // the beach a hair out of step with the ground it is standing on.
+    float2 bed  = sk_bedrockPair(bedrockLUT, wp);
+    float b     = bed.x;
+    float depth = bed.y;
 
     // Wetness follows the *surface*, not the hardpack — the top of a deep bed
     // dries in the sun exactly like a shallow one does.
@@ -51,12 +86,14 @@ kernel void sim_init(texture2d<float, access::write> outSand [[texture(0)]],
 /// The shore as the tide left it, baked once. It never changes, and deriving it
 /// per texel per frame cost more than the entire rest of the frame.
 kernel void sim_pristine(texture2d<float, access::write> outPristine [[texture(0)]],
+                         texture2d<float>                bedrockLUT  [[texture(1)]],
                          constant SKSimUniforms &u                   [[buffer(0)]],
                          uint2 gid                                   [[thread_position_in_grid]]) {
     if (gid.x >= outPristine.get_width() || gid.y >= outPristine.get_height()) { return; }
     float2 uv = (float2(gid) + 0.5f) * u.texel;
     float2 wp = sk_uvToWorld(uv, u.domain);
-    outPristine.write(float4(sk_bedrock(wp), sk_sandBed(wp), 0.0f, 1.0f), gid);
+    float2 bed = sk_bedrockPair(bedrockLUT, wp);
+    outPristine.write(float4(bed.x, bed.y, 0.0f, 1.0f), gid);
 }
 
 // MARK: - Helpers
@@ -108,11 +145,12 @@ constant int2 SK_OFF[8] = {
 
 // MARK: - The step
 
-kernel void sim_step(texture2d<float, access::read>  inSand    [[texture(0)]],
-                     texture2d<float, access::write> outSand   [[texture(1)]],
-                     texture2d<float, access::read>  inDeposit [[texture(2)]],
-                     constant SKSimUniforms &u                 [[buffer(0)]],
-                     uint2 gid                                 [[thread_position_in_grid]]) {
+kernel void sim_step(texture2d<float, access::read>  inSand     [[texture(0)]],
+                     texture2d<float, access::write> outSand    [[texture(1)]],
+                     texture2d<float, access::read>  inDeposit  [[texture(2)]],
+                     texture2d<float>                bedrockLUT [[texture(3)]],
+                     constant SKSimUniforms &u                  [[buffer(0)]],
+                     uint2 gid                                  [[thread_position_in_grid]]) {
     const uint W = inSand.get_width();
     const uint H = inSand.get_height();
     if (gid.x >= W || gid.y >= H) { return; }
@@ -123,7 +161,15 @@ kernel void sim_step(texture2d<float, access::read>  inSand    [[texture(0)]],
     float4 S = inSand.read(gid);
     float h = S.r, m = S.g, c = S.b, f = S.a;
 
-    float b0 = sk_bedrock(wp);
+    // Nine of these per texel per substep — the single largest consumer of
+    // `sk_bedrock` in the whole project, and the reason the table exists.
+    //
+    // Invariant 1 survives the change because the lookup is still a pure
+    // function of world position: when the neighbour runs its own step and looks
+    // back at this cell, it rebuilds the identical `wp` from the identical
+    // arithmetic and gets the identical bits out of the table. The pair transfer
+    // stays exactly antisymmetric.
+    float b0 = sk_bedrockAt(bedrockLUT, wp);
     float H0 = b0 + h;
     float cellSize = u.domain.z / u.simResolution;
 
@@ -149,7 +195,7 @@ kernel void sim_step(texture2d<float, access::read>  inSand    [[texture(0)]],
         float2 nuv = (float2(n) + 0.5f) * u.texel;
         float2 nwp = sk_uvToWorld(nuv, u.domain);
 
-        float bn = sk_bedrock(nwp);
+        float bn = sk_bedrockAt(bedrockLUT, nwp);
         float Hn = bn + Sn.r;
         sumH += Hn;
         nH   += 1.0f;
@@ -391,17 +437,18 @@ kernel void sim_step(texture2d<float, access::read>  inSand    [[texture(0)]],
 // spaced samples each, with a per-texel rotation so the banding turns into
 // noise that the half-resolution blur eats.
 
-kernel void sim_ao(texture2d<float, access::sample> sandTex [[texture(0)]],
-                   texture2d<float, access::write> outAO    [[texture(1)]],
-                   constant SKSimUniforms &u                [[buffer(0)]],
-                   uint2 gid                                [[thread_position_in_grid]]) {
+kernel void sim_ao(texture2d<float, access::sample> sandTex    [[texture(0)]],
+                   texture2d<float, access::write>  outAO      [[texture(1)]],
+                   texture2d<float>                 bedrockLUT [[texture(2)]],
+                   constant SKSimUniforms &u                  [[buffer(0)]],
+                   uint2 gid                                  [[thread_position_in_grid]]) {
     const uint W = outAO.get_width();
     const uint H = outAO.get_height();
     if (gid.x >= W || gid.y >= H) { return; }
 
     float2 uv = (float2(gid) + 0.5f) / float2(W, H);
     float2 wp = sk_uvToWorld(uv, u.domain);
-    float h0 = sk_groundY(sandTex, wp, u.domain, u.simResolution, u.texel);
+    float h0 = sk_groundY(sandTex, bedrockLUT, wp, u.domain, u.simResolution, u.texel);
 
     float vis = 0.0f;
     float jitter = sk_hash12(float2(gid)) * SK_TAU;
@@ -412,7 +459,8 @@ kernel void sim_ao(texture2d<float, access::sample> sandTex [[texture(0)]],
         float maxS = 0.0f;
         float dist = 0.055f;
         for (int s = 0; s < 9; ++s) {
-            float hq = sk_groundY(sandTex, wp + dir * dist, u.domain, u.simResolution, u.texel);
+            float hq = sk_groundY(sandTex, bedrockLUT, wp + dir * dist,
+                                  u.domain, u.simResolution, u.texel);
             maxS = max(maxS, (hq - h0) / dist);
             dist *= 1.52f;
         }
@@ -575,11 +623,12 @@ kernel void metrics_final(device const float *partials [[buffer(0)]],
 // lives on the GPU and reading 4 MB back per frame to answer "what is under the
 // finger" would be an absurd trade.
 
-kernel void sim_pick(texture2d<float, access::sample> sandTex [[texture(0)]],
-                     device SKPickResult *out                 [[buffer(0)]],
-                     constant SKSimUniforms &u                [[buffer(1)]],
-                     constant float4 &rayOrigin               [[buffer(2)]],
-                     constant float4 &rayDirection            [[buffer(3)]],
+kernel void sim_pick(texture2d<float, access::sample> sandTex    [[texture(0)]],
+                     texture2d<float>                 bedrockLUT [[texture(1)]],
+                     device SKPickResult *out                    [[buffer(0)]],
+                     constant SKSimUniforms &u                  [[buffer(1)]],
+                     constant float4 &rayOrigin                 [[buffer(2)]],
+                     constant float4 &rayDirection              [[buffer(3)]],
                      uint tid [[thread_position_in_grid]]) {
     if (tid != 0) { return; }
 
@@ -590,7 +639,7 @@ kernel void sim_pick(texture2d<float, access::sample> sandTex [[texture(0)]],
 
     for (int i = 0; i < 190; ++i) {
         float3 p = ro + rd * t;
-        float d = p.y - sk_groundY(sandTex, p.xz, u.domain, u.simResolution, u.texel);
+        float d = p.y - sk_groundY(sandTex, bedrockLUT, p.xz, u.domain, u.simResolution, u.texel);
         if (d <= 0.0f) { hitT = t; break; }
         prevT = t;
         t += max(0.045f, d * 0.62f);
@@ -609,7 +658,7 @@ kernel void sim_pick(texture2d<float, access::sample> sandTex [[texture(0)]],
     for (int i = 0; i < 14; ++i) {
         float mid = 0.5f * (lo + hi);
         float3 p = ro + rd * mid;
-        if (p.y - sk_groundY(sandTex, p.xz, u.domain, u.simResolution, u.texel) > 0.0f) {
+        if (p.y - sk_groundY(sandTex, bedrockLUT, p.xz, u.domain, u.simResolution, u.texel) > 0.0f) {
             lo = mid;
         } else {
             hi = mid;
@@ -624,7 +673,7 @@ kernel void sim_pick(texture2d<float, access::sample> sandTex [[texture(0)]],
     }
 
     r.point = float4(hp, 1.0f);
-    r.sand  = float4(s.g, s.b, s.r, sk_bedrock(hp.xz));
+    r.sand  = float4(s.g, s.b, s.r, sk_bedrockAt(bedrockLUT, hp.xz));
     out[0] = r;
 }
 

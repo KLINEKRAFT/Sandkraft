@@ -31,6 +31,17 @@ constant float SK_TAU = 6.28318530718f;
 /// −Z, and the camera is happiest somewhere in between.
 constant float4 SK_DOMAIN = float4(-24.0f, -24.0f, 48.0f, 48.0f);
 
+/// Half-width of the baked hardpack table, in metres — it covers ±40 m on both
+/// axes, comfortably past the 48 m simulated square and past every headland.
+///
+/// Deliberately a compile-time constant rather than a uniform. The table is a
+/// property of the terrain, not of the frame: nothing about it varies at
+/// runtime, so putting it in `SKFrameUniforms` would widen a struct that
+/// crosses the Swift ⇄ Metal boundary in order to carry a number that can never
+/// change. The Swift side never learns the extent at all — it supplies a
+/// texture and `bedrock_bake` fills it from here.
+constant float SK_BEDROCK_EXTENT = 40.0f;
+
 // MARK: - Hashes
 //
 // Hoskins-style integer-free hashes. Cheap, well-distributed, and — importantly
@@ -188,6 +199,78 @@ inline float sk_sandBed(float2 p) {
     // sand over it, which is enough to cut a moat you could lose a spade in.
     float d = 0.30f + 1.30f * pad + 0.18f * sk_vnoise(p * 0.33f) + 0.08f * sk_vnoise(p * 1.1f);
     return max(d * (1.0f - sk_rockiness(p)), 0.0f);
+}
+
+// MARK: - The shore, baked
+//
+// `sk_bedrock` is nine value-noise evaluations and two sines, and it describes
+// ground that never moves. Every fragment of terrain differenced it four times
+// to rebuild the macro normal, the water paid it five times, and the solver paid
+// it nine times per texel per substep — for an answer that was the same on the
+// first frame as on the last. It is now baked into an RG32Float table once, at
+// startup, and read back with two texture fetches.
+//
+// The table is the *only* consumer of `sk_bedrock` and `sk_sandBed` in the
+// steady state. Both stay in this header because `bedrock_bake` needs them, and
+// because the world does not stop at ±40 m: the beach skirt and the sea carry on
+// out to ±340 m, and out there the analytic pair is still what answers.
+
+/// One tap of the baked hardpack: `.x` is `sk_bedrock`, `.y` is `sk_sandBed`.
+///
+/// **The table is vertex-centred, not texel-centred.** Texel 0 holds the value
+/// at −SK_BEDROCK_EXTENT and texel N−1 the value at +SK_BEDROCK_EXTENT, so a
+/// lookup landing exactly on the border falls on a stored texel with a zero
+/// interpolation weight and returns the baked number itself. That is what keeps
+/// the join with the analytic fallback below a micron wide: at the border the
+/// two sides are the same function of the same position, differing only by the
+/// float32 round trip of a value a few metres tall. Space the table the obvious
+/// way instead — texel centres at (i+0.5)/N — and the border lands halfway
+/// between two samples, where the interpolation error is at its worst and the
+/// seam becomes a millimetre step you can see the sun catch.
+///
+/// The weights are smoothstepped for the same reason `sk_sandSmooth`
+/// smoothsteps its own: plain bilinear has a piecewise-constant gradient, and
+/// the terrain fragment rebuilds its macro normal by *differencing this
+/// function*. Straight bilinear would print the table's own texel grid onto the
+/// beach as a quilt of diamonds.
+inline float2 sk_bedrockPair(texture2d<float> lut, float2 p) {
+    // Past the table, answer the long way. This is the skirt and the open sea,
+    // where the ground is a plane with some noise on it and nobody is building.
+    if (any(abs(p) > float2(SK_BEDROCK_EXTENT))) {
+        return float2(sk_bedrock(p), sk_sandBed(p));
+    }
+
+    constexpr sampler np(coord::normalized, filter::nearest, address::clamp_to_edge);
+
+    float N = float(lut.get_width());
+
+    // Normalise first, scale second. Folding the two into one reciprocal
+    // constant would round it, and then a lookup at exactly ±SK_BEDROCK_EXTENT
+    // would land a hair either side of the last texel instead of on it — which
+    // is the whole property the seam rests on. This way the division is exact at
+    // both borders and `f` comes out at precisely zero.
+    float2 g = (p + SK_BEDROCK_EXTENT) / (2.0f * SK_BEDROCK_EXTENT);
+    float2 t = g * (N - 1.0f);
+    float2 i = floor(t), f = fract(t);
+    f = f * f * (3.0f - 2.0f * f);
+
+    float2 texel = float2(1.0f / N);
+    float2 b = (i + 0.5f) * texel;
+    // Explicit LOD, not because there is a mip chain — there is not — but because
+    // this is called from vertex functions too, and an implicit-LOD sample in a
+    // vertex function does not compile. At the far border the +1 taps run off the
+    // edge; clamp_to_edge catches them, and their weight is zero anyway.
+    float2 s00 = lut.sample(np, b, level(0)).rg;
+    float2 s10 = lut.sample(np, b + float2(texel.x, 0.0f), level(0)).rg;
+    float2 s01 = lut.sample(np, b + float2(0.0f, texel.y), level(0)).rg;
+    float2 s11 = lut.sample(np, b + texel, level(0)).rg;
+    return mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
+}
+
+/// The hardpack alone. Prefer `sk_bedrockPair` where the loose bed is wanted as
+/// well — it is the same tap.
+inline float sk_bedrockAt(texture2d<float> lut, float2 p) {
+    return sk_bedrockPair(lut, p).x;
 }
 
 // MARK: - The angle of repose
@@ -624,12 +707,14 @@ inline float4 sk_sandBilinear(texture2d<float, access::sample> sandTex,
 /// standing on it. Outside the simulated square this falls back to the analytic
 /// bed, which is what makes the skirt meet the domain without a seam.
 inline float sk_groundY(texture2d<float, access::sample> sandTex,
+                        texture2d<float> bedrockLUT,
                         float2 p, float4 domain, float res, float2 texel) {
     float2 uv = sk_worldToUV(p, domain);
+    float2 bed = sk_bedrockPair(bedrockLUT, p);
     if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f) {
-        return sk_bedrock(p) + sk_sandBed(p);
+        return bed.x + bed.y;
     }
-    return sk_bedrock(p) + sk_sandBilinear(sandTex, uv, res, texel).r;
+    return bed.x + sk_sandBilinear(sandTex, uv, res, texel).r;
 }
 
 #endif /* SandkraftCommon_h */

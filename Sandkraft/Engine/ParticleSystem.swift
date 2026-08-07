@@ -130,6 +130,7 @@ final class ParticleSystem {
     func update(environment: SimulationEnvironment,
                 dt: Float,
                 sandTexture: MTLTexture,
+                bedrockTexture: MTLTexture,
                 depositBuffer: MTLBuffer,
                 in commandBuffer: MTLCommandBuffer) {
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
@@ -163,6 +164,7 @@ final class ParticleSystem {
         encoder.setBuffer(depositBuffer, offset: 0, index: 1)
         encoder.setBytes(&u, length: MemoryLayout<SKParticleUniforms>.stride, index: 2)
         encoder.setTexture(sandTexture, index: 0)
+        encoder.setTexture(bedrockTexture, index: 1)
         context.dispatch1D(encoder, count: capacity, threadsPerGroup: 64)
 
         encoder.endEncoding()

@@ -37,13 +37,16 @@ struct TerrainVertexOut {
 vertex TerrainVertexOut terrain_vertex(uint vid [[vertex_id]],
                                        constant SKFrameUniforms &frame [[buffer(0)]],
                                        constant SKTerrainUniforms &terrain [[buffer(1)]],
-                                       texture2d<float> sandTex [[texture(0)]]) {
+                                       texture2d<float> sandTex [[texture(0)]],
+                                       texture2d<float> bedrockLUT [[texture(1)]]) {
     constexpr sampler np(coord::normalized, filter::nearest, address::clamp_to_edge);
 
     float2 uv = sk_gridUV(vid, uint(terrain.gridEdge));
     float2 wp;
     float4 S = float4(0.0f);
     float drop = 0.0f;
+    bool offField = false;      // beyond the simulated square: the loose bed
+                                // comes from the table, not from the field
 
     if (terrain.outer > 0.5f) {
         // The skirt. Inside the domain it samples the *same* field as the inner
@@ -54,7 +57,8 @@ vertex TerrainVertexOut terrain_vertex(uint vid [[vertex_id]],
         wp = sk_skirtPosition(uv);
         float2 duv = (wp - frame.domain.xy) / frame.domain.zw;
         bool ins = duv.x > 0.0f && duv.x < 1.0f && duv.y > 0.0f && duv.y < 1.0f;
-        S.r = ins ? sandTex.sample(np, clamp(duv, 0.0f, 1.0f), level(0)).r : sk_sandBed(wp);
+        if (ins) { S.r = sandTex.sample(np, clamp(duv, 0.0f, 1.0f), level(0)).r; }
+        else     { offField = true; }
         float2 dd = min(duv, 1.0f - duv);
         drop = 0.85f * smoothstep(0.0f, 0.045f, max(0.0f, min(dd.x, dd.y)));
         uv = clamp(duv, 0.0f, 1.0f);
@@ -63,7 +67,12 @@ vertex TerrainVertexOut terrain_vertex(uint vid [[vertex_id]],
         S = sandTex.sample(np, uv, level(0));
     }
 
-    float y = sk_bedrock(wp) + S.r - drop;
+    // One tap, taken after `wp` is settled, serving both the hardpack and — off
+    // the simulated square — the loose bed standing on it.
+    float2 bed = sk_bedrockPair(bedrockLUT, wp);
+    if (offField) { S.r = bed.y; }
+
+    float y = bed.x + S.r - drop;
 
     TerrainVertexOut out;
     out.worldPosition = float3(wp.x, y, wp.y);
@@ -79,11 +88,12 @@ vertex TerrainVertexOut terrain_vertex(uint vid [[vertex_id]],
 vertex float4 terrain_shadow_vertex(uint vid [[vertex_id]],
                                     constant SKFrameUniforms &frame [[buffer(0)]],
                                     constant SKTerrainUniforms &terrain [[buffer(1)]],
-                                    texture2d<float> sandTex [[texture(0)]]) {
+                                    texture2d<float> sandTex [[texture(0)]],
+                                    texture2d<float> bedrockLUT [[texture(1)]]) {
     constexpr sampler np(coord::normalized, filter::nearest, address::clamp_to_edge);
     float2 uv = sk_gridUV(vid, uint(terrain.gridEdge));
     float2 wp = frame.domain.xy + uv * frame.domain.zw;
-    float y = sk_bedrock(wp) + sandTex.sample(np, uv, level(0)).r;
+    float y = sk_bedrockAt(bedrockLUT, wp) + sandTex.sample(np, uv, level(0)).r;
     return frame.lightViewProjection * float4(wp.x, y, wp.y, 1.0f);
 }
 
@@ -188,7 +198,8 @@ fragment float4 terrain_fragment(TerrainVertexOut in [[stage_in]],
                                  texture2d<float> sandTex            [[texture(0)]],
                                  texture2d<float> aoTex              [[texture(1)]],
                                  texture2d<float> skyLUT             [[texture(2)]],
-                                 depth2d<float>   shadowMap          [[texture(3)]]) {
+                                 depth2d<float>   shadowMap          [[texture(3)]],
+                                 texture2d<float> bedrockLUT         [[texture(4)]]) {
     constexpr sampler linearClamp(coord::normalized, filter::linear, address::clamp_to_edge);
 
     float2 wp = in.worldPosition.xz;
@@ -210,11 +221,17 @@ fragment float4 terrain_fragment(TerrainVertexOut in [[stage_in]],
     //     vertex normals exist anywhere in this renderer. This is the most
     //     expensive thing in the shader and the reason the surface reads as a
     //     continuum rather than as a mesh.
+    //
+    //     Four taps, and each one used to rebuild the hardpack from scratch —
+    //     thirty-six value-noise evaluations per pixel to describe ground that
+    //     has not moved all game. They now read the baked table, which is why
+    //     its weights have to be smoothstepped: this is the difference that
+    //     would otherwise print the table's texel grid onto the beach.
     float e = max(terrain.cell, 1e-3f);
-    float hl = sk_groundYSmooth(sandTex, wp - float2(e, 0.0f), frame.domain, frame.simResolution, frame.texel);
-    float hr = sk_groundYSmooth(sandTex, wp + float2(e, 0.0f), frame.domain, frame.simResolution, frame.texel);
-    float hd = sk_groundYSmooth(sandTex, wp - float2(0.0f, e), frame.domain, frame.simResolution, frame.texel);
-    float hu = sk_groundYSmooth(sandTex, wp + float2(0.0f, e), frame.domain, frame.simResolution, frame.texel);
+    float hl = sk_groundYSmooth(sandTex, bedrockLUT, wp - float2(e, 0.0f), frame.domain, frame.simResolution, frame.texel);
+    float hr = sk_groundYSmooth(sandTex, bedrockLUT, wp + float2(e, 0.0f), frame.domain, frame.simResolution, frame.texel);
+    float hd = sk_groundYSmooth(sandTex, bedrockLUT, wp - float2(0.0f, e), frame.domain, frame.simResolution, frame.texel);
+    float hu = sk_groundYSmooth(sandTex, bedrockLUT, wp + float2(0.0f, e), frame.domain, frame.simResolution, frame.texel);
     float3 Nmac = normalize(float3(hl - hr, 2.0f * e, hd - hu));
 
     // 3 · Wall projection. All the procedural texture is authored top-down, which

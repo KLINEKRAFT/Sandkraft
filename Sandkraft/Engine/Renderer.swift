@@ -482,6 +482,7 @@ final class Renderer: NSObject {
             particles.update(environment: input.environment,
                              dt: Float(dt),
                              sandTexture: simulation.sand,
+                             bedrockTexture: simulation.bedrock,
                              depositBuffer: simulation.depositBuffer,
                              in: commandBuffer)
         }
@@ -518,6 +519,7 @@ final class Renderer: NSObject {
             encoder.setVertexBytes(&frame, length: MemoryLayout<SKFrameUniforms>.stride, index: 0)
             encoder.setVertexBytes(&shadowTerrain, length: MemoryLayout<SKTerrainUniforms>.stride, index: 1)
             encoder.setVertexTexture(simulation.sand, index: 0)
+            encoder.setVertexTexture(simulation.bedrock, index: 1)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0,
                                    vertexCount: Renderer.gridVertexCount(tier.terrainGrid))
 
@@ -558,10 +560,12 @@ final class Renderer: NSObject {
             encoder.setFragmentBytes(&frame, length: MemoryLayout<SKFrameUniforms>.stride, index: 0)
             encoder.setFragmentBytes(&look, length: MemoryLayout<SKLookUniforms>.stride, index: 2)
             encoder.setVertexTexture(simulation.sand, index: 0)
+            encoder.setVertexTexture(simulation.bedrock, index: 1)
             encoder.setFragmentTexture(simulation.sand, index: 0)
             encoder.setFragmentTexture(simulation.ambientOcclusion, index: 1)
             encoder.setFragmentTexture(skyLUT, index: 2)
             encoder.setFragmentTexture(shadowMap, index: 3)
+            encoder.setFragmentTexture(simulation.bedrock, index: 4)
             encodeLanterns(encoder: encoder, index: 3)
 
             // The skirt goes first and is pushed back in *depth*, not in height,
@@ -620,10 +624,12 @@ final class Renderer: NSObject {
             encoder.setFragmentBytes(&water, length: MemoryLayout<SKTerrainUniforms>.stride, index: 1)
             encoder.setFragmentBytes(&look, length: MemoryLayout<SKLookUniforms>.stride, index: 2)
             encoder.setVertexTexture(simulation.sand, index: 0)
+            encoder.setVertexTexture(simulation.bedrock, index: 1)
             encoder.setFragmentTexture(simulation.sand, index: 0)
             encoder.setFragmentTexture(skyLUT, index: 1)
             encoder.setFragmentTexture(sceneCopy, index: 2)
             encoder.setFragmentTexture(shadowMap, index: 3)
+            encoder.setFragmentTexture(simulation.bedrock, index: 4)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0,
                                    vertexCount: Renderer.gridVertexCount(tier.waterGrid))
 
