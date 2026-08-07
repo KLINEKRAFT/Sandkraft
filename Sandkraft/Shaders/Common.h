@@ -333,11 +333,43 @@ inline float2 sk_mouldShape(float2 q, int id, float p) {
 
 // MARK: - The water
 
-constant float4 SK_WAVE0 = float4( 0.05f, -1.00f, 19.00f, 0.200f);
-constant float4 SK_WAVE1 = float4(-0.26f, -0.97f, 12.20f, 0.124f);
-constant float4 SK_WAVE2 = float4( 0.33f, -0.95f,  6.90f, 0.066f);
-constant float4 SK_WAVE3 = float4(-0.14f, -0.99f,  3.90f, 0.031f);
-constant float4 SK_WAVE4 = float4( 0.47f, -0.89f,  2.35f, 0.017f);
+// direction.xy · wavelength in metres · amplitude weight
+//
+// The amplitude falls as roughly L^1.5, not L^1, and that exponent is the whole
+// difference between a swell and a chop.
+//
+// What the eye reads as choppiness is *slope*, and the slope a component
+// contributes is A·k — amplitude times wavenumber. The previous table fell as
+// L^1, which holds A·k very nearly constant: every one of the five octaves
+// carried the same slope as the 19-metre swell, so none of them was the sea and
+// all of them were texture. A real wind sea is peak-dominated; the short waves
+// ride on the long one rather than competing with it.
+//
+//   before          after
+//   L      A·k      L      A·k
+//   19.0   0.066    23.0   0.062
+//   12.2   0.064    13.1   0.046
+//    6.9   0.060     8.3   0.037
+//    3.9   0.050     4.4   0.027
+//    2.35  0.046     2.5   0.020
+//
+// Total slope drops by a third while total height drops by under a tenth. Same
+// sea, and it stops crawling.
+//
+// The wavelengths are also respread. The old set ran 19 : 12.2 : 6.9 : 3.9 with
+// ratios of 1.77 twice over, and a near-geometric progression beats against
+// itself on a fixed period — which is what "wonky" looks like from a distance.
+// The new ratios are deliberately irregular.
+//
+// Directional spread widens with decreasing wavelength, which is both correct
+// and what stops the crests reading as one long extruded ridge. The widest is
+// pulled in from 28° to 24°, because past that the short waves start to look
+// like a cross-sea rather than like wind on a swell.
+constant float4 SK_WAVE0 = float4( 0.05f, -1.000f, 23.00f, 0.2250f);
+constant float4 SK_WAVE1 = float4(-0.22f, -0.975f, 13.10f, 0.0967f);
+constant float4 SK_WAVE2 = float4( 0.29f, -0.957f,  8.30f, 0.0488f);
+constant float4 SK_WAVE3 = float4(-0.34f, -0.940f,  4.40f, 0.0188f);
+constant float4 SK_WAVE4 = float4( 0.41f, -0.912f,  2.50f, 0.0081f);
 
 inline float4 sk_waveParam(int i) {
     if (i == 0) { return SK_WAVE0; }
