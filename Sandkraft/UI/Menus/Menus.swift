@@ -306,7 +306,14 @@ struct TidePicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metric.s) {
-            HStack(spacing: Metric.s) {
+            // A grid rather than an HStack, and adaptive rather than fixed at
+            // nine. Nine forty-two-point circles is 450 points of row, and an
+            // iPhone in portrait has about 330 to give — so on a Mac this is one
+            // row of nine and on a phone it wraps to two, without either of them
+            // being a special case or a horizontal scroller nobody discovers.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 42), spacing: Metric.s)],
+                      alignment: .leading,
+                      spacing: Metric.s) {
                 ForEach(Tide.campaign) { tide in
                     let unlocked = tide.number <= progress
                     Button {
@@ -316,7 +323,12 @@ struct TidePicker: View {
                             .font(.skNumeric(15, weight: .medium))
                             .foregroundStyle(unlocked ? Palette.primaryText
                                                       : Palette.secondaryText.opacity(0.35))
-                            .frame(width: 32, height: 32)
+                            // Forty-two rather than the thirty-two this looks
+                            // like it wants to be: `Metric.touchTarget` is
+                            // forty-four, the gap makes up the difference, and a
+                            // number you have to aim at is a number you press by
+                            // accident.
+                            .frame(width: 42, height: 42)
                             .background {
                                 Circle()
                                     .fill(Palette.accent.opacity(hovered == tide.number ? 0.22 : 0))
@@ -340,9 +352,10 @@ struct TidePicker: View {
                 Text("\(tide.number). \(tide.name)")
                     .font(.skProse(12))
                     .foregroundStyle(Palette.secondaryText)
-                    // A fixed height so the row below does not hop as the
-                    // pointer moves along the numbers.
-                    .frame(height: 16, alignment: .leading)
+                    // A floor, not a fixed height: it stops the row below hopping
+                    // as the pointer moves along the numbers, without clipping the
+                    // line at the larger Dynamic Type sizes.
+                    .frame(minHeight: 18, alignment: .leading)
                     .skLegible()
             }
         }
