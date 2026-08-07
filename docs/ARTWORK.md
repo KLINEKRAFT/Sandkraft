@@ -14,14 +14,25 @@ happy to reference one file from several slots, and 16@2x and 32@1x are both
 thirty-two pixels — cutting eleven would mean four more files to keep in step
 for no benefit.
 
-Generate them from a single 1024×1024 master:
+Generate them from a single 1024×1024 master, which lives in `Artwork/`:
 
 ```bash
-Tools/make-appicon.sh ~/Desktop/sandkraft-icon.png
+Tools/make-appicon.sh Artwork/sandkraft-icon-master.png
 ```
 
 That uses `sips`, which ships with macOS, so there is nothing to install. Build
 and the icon is in.
+
+**Commit both the master and the seven generated files.** They are small, they
+change roughly never, and the alternative has already cost us the icon once: for
+most of this project's life the PNGs existed only in one working folder, because
+they are generated and generating them felt like a reason not to track them.
+`Contents.json` was committed and the files it names were not, so a fresh clone
+built an app with no icon — and *silently*, because a missing icon is not a build
+error. Deleting that folder deleted the only copy of the artwork.
+
+The script stays useful for regenerating the seven sizes after the master
+changes. It is not a substitute for having the master.
 
 ### macOS and iOS want opposite things
 
