@@ -316,7 +316,18 @@ final class GameModel {
     // loading also has to come *back* through here, because restoring a beach
     // means restoring the day and the props as well as the sand.
 
-    private(set) var saveWanted = false
+    /// Where a requested save is going. The two destinations share every step up
+    /// to the last one — the same readback, the same header, the same container
+    /// — and differ only in who receives the bytes, so they are one request with
+    /// a destination rather than two mechanisms.
+    enum SaveDestination: Equatable, Sendable {
+        /// To a file the player picks, through `fileExporter`.
+        case export
+        /// To the autosave slot, silently.
+        case autosave
+    }
+
+    private(set) var saveWanted: SaveDestination?
 
     /// A finished document, waiting for the interface to write it somewhere.
     var pendingBeach: Data?
@@ -333,17 +344,24 @@ final class GameModel {
     var openBeachWanted = false
 
     func saveBeach() {
-        saveWanted = true
+        saveWanted = .export
+    }
+
+    /// Ask for an autosave, unless a save the player asked for out loud is
+    /// already queued. A readback is a readback; there is no reason to do two in
+    /// one frame, and of the two the one with a file panel attached is the one
+    /// worth keeping.
+    func autosaveBeach() {
+        if saveWanted == nil { saveWanted = .autosave }
     }
 
     func openBeach() {
         openBeachWanted = true
     }
 
-    func consumeSaveRequest() -> Bool {
-        guard saveWanted else { return false }
-        saveWanted = false
-        return true
+    func consumeSaveRequest() -> SaveDestination? {
+        defer { saveWanted = nil }
+        return saveWanted
     }
 
     func beachHeader(resolution: Int) -> BeachHeader {

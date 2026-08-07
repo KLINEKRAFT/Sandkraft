@@ -47,6 +47,23 @@ final class SceneCoordinator: NSObject, ObservableObject {
     /// would make the effect frame-rate dependent.
     private var effectAccumulator: Double = 0
 
+    // MARK: Autosave
+    //
+    // Written on a timer rather than on the way out. An autosave costs a GPU
+    // readback and a completed handler, so it needs a frame to happen in — and
+    // the moment the app is being torn down is precisely the moment there is no
+    // guarantee of another frame, on either platform. Saving *while* playing
+    // means the worst case is losing the last half-minute, instead of losing
+    // everything on any exit the app did not see coming.
+
+    private static let autosaveInterval: Double = 30
+
+    /// True when the sand has changed since the last autosave landed. Without
+    /// it, sitting still and admiring a castle would rewrite eight megabytes
+    /// every thirty seconds to say nothing had happened.
+    private var beachDirty = false
+    private var sinceAutosave: Double = 0
+
     init(renderer: Renderer, model: GameModel) {
         self.renderer = renderer
         self.model = model
@@ -58,6 +75,11 @@ final class SceneCoordinator: NSObject, ObservableObject {
 
     func advance(dt: Double) {
         model.update(dt: dt)
+
+        sinceAutosave += dt
+        if beachDirty, sinceAutosave >= Self.autosaveInterval {
+            model.autosaveBeach()
+        }
 
         // Push everything the renderer needs for this frame.
         var input = FrameInput()
@@ -296,6 +318,34 @@ final class SceneCoordinator: NSObject, ObservableObject {
 
     func resetBeach() {
         needsBeachReset = true
+        // A fresh beach is a change like any other. Without this, laying one
+        // down and quitting would leave the autosave describing the castle it
+        // replaced — and Continue would put back sand the player had already
+        // decided to throw away.
+        beachDirty = true
+    }
+
+    /// Ask for an autosave at the next opportunity, whatever the timer says.
+    ///
+    /// Best-effort, and knowingly so: it still needs a frame to happen in, and
+    /// the caller for this is the app being sent to the background, which is not
+    /// a moment that guarantees one. It costs a line and sometimes saves the
+    /// last half-minute. When it does not, the timer already saved the rest.
+    func requestAutosave() {
+        guard beachDirty else { return }
+        model.autosaveBeach()
+    }
+
+    /// Put the autosaved beach back. Returns false when there is nothing stored,
+    /// or when what is stored was written at a different simulation resolution —
+    /// the caller uses that to decide whether to offer Continue at all.
+    @discardableResult
+    func restoreAutosavedBeach() -> Bool {
+        guard let header = BeachStore.storedHeader(),
+              header.simResolution == renderer.simulation.resolution,
+              let data = BeachStore.read() else { return false }
+        model.pendingBeachLoad = data
+        return true
     }
 
     // MARK: - Encoding hooks
@@ -328,12 +378,18 @@ final class SceneCoordinator: NSObject, ObservableObject {
             renderer.simulation.commitUndoState(in: commandBuffer)
             strokeCaptured = false
             publishUndoState()
+            // One gesture, one change worth keeping. This is the same edge the
+            // undo stack pushes on, and for the same reason: it is the moment
+            // the player finished doing something rather than the sixty moments
+            // during which they were doing it.
+            beachDirty = true
         }
 
         renderer.simulation.stroke = model.currentBrush() ?? BrushStroke()
         if let stamp = pendingStamp {
             renderer.simulation.armStamp(stamp)
             pendingStamp = nil
+            beachDirty = true
         }
 
         loadBeachIfPending(in: commandBuffer)
@@ -345,11 +401,23 @@ final class SceneCoordinator: NSObject, ObservableObject {
     // MARK: - Beaches on disk
 
     private func saveBeachIfRequested(in commandBuffer: MTLCommandBuffer) {
-        guard model.consumeSaveRequest() else { return }
+        guard let destination = model.consumeSaveRequest() else { return }
+
+        // Restart the clock here rather than on completion, and before the guard
+        // rather than after it. Before, so that a save which cannot even start
+        // waits out the interval instead of retrying every frame for as long as
+        // whatever went wrong stays wrong; here rather than on completion, so a
+        // save that takes several frames to come back cannot queue a second one
+        // up behind it.
+        sinceAutosave = 0
 
         let resolution = renderer.simulation.resolution
         guard let staging = renderer.simulation.snapshotForSaving(in: commandBuffer) else {
-            model.beachMessage = "The beach could not be read back from the GPU."
+            // An autosave that cannot read the GPU says nothing. There is no
+            // action for the player in it, and it is not what they were doing.
+            if destination == .export {
+                model.beachMessage = "The beach could not be read back from the GPU."
+            }
             return
         }
 
@@ -359,16 +427,30 @@ final class SceneCoordinator: NSObject, ObservableObject {
         let header = model.beachHeader(resolution: resolution)
         let byteCount = resolution * resolution * 16
 
-        commandBuffer.addCompletedHandler { [weak model] _ in
+        commandBuffer.addCompletedHandler { [weak model, weak self] _ in
             let field = Data(bytes: staging.contents(), count: byteCount)
             let document = try? BeachDocumentFormat.encode(header: header, field: field)
+
+            // The autosave is written here, off the main actor, because it is
+            // several megabytes going to disk and nothing is waiting on it. An
+            // export goes back to the main actor instead — the thing waiting on
+            // that one is a file panel.
+            if destination == .autosave, let document {
+                BeachStore.write(document)
+            }
+
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let model else { return }
-                    if let document {
-                        model.pendingBeach = document
-                    } else {
-                        model.beachMessage = "The beach could not be written."
+                    switch destination {
+                    case .export:
+                        if let document {
+                            model.pendingBeach = document
+                        } else {
+                            model.beachMessage = "The beach could not be written."
+                        }
+                    case .autosave:
+                        if document != nil { self?.beachDirty = false }
                     }
                 }
             }

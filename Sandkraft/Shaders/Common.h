@@ -29,10 +29,23 @@ constant float SK_TAU = 6.28318530718f;
 
 /// The simulated square, in metres. The sea lies toward +Z, the dunes stand at
 /// −Z, and the camera is happiest somewhere in between.
-constant float4 SK_DOMAIN = float4(-24.0f, -24.0f, 48.0f, 48.0f);
+///
+/// **Matches `SandSimulation.halfExtent` in Swift, and the two must be changed
+/// together.** Which is worth being blunt about, because nothing in any shader
+/// reads this: every kernel and every vertex function is handed the domain in
+/// its uniforms, so this constant is documentation that happens to have a value.
+/// Change it alone and nothing at all happens; change the Swift alone and the
+/// simulation quietly moves out from under the shore described below.
+///
+/// What *is* tied to the number is the shape of that shore. The working ground,
+/// the dune ridge and the five headlands are placed in absolute metres, and all
+/// of them moved outward by a quarter when the square went from ±24 m to ±30 m —
+/// so that the beach got genuinely wider, rather than the player merely being
+/// handed more of the scenery that used to be off the edge of it.
+constant float4 SK_DOMAIN = float4(-30.0f, -30.0f, 60.0f, 60.0f);
 
-/// Half-width of the baked hardpack table, in metres — it covers ±40 m on both
-/// axes, comfortably past the 48 m simulated square and past every headland.
+/// Half-width of the baked hardpack table, in metres — it covers ±48 m on both
+/// axes, comfortably past the 60 m simulated square and past every headland.
 ///
 /// Deliberately a compile-time constant rather than a uniform. The table is a
 /// property of the terrain, not of the frame: nothing about it varies at
@@ -40,7 +53,7 @@ constant float4 SK_DOMAIN = float4(-24.0f, -24.0f, 48.0f, 48.0f);
 /// crosses the Swift ⇄ Metal boundary in order to carry a number that can never
 /// change. The Swift side never learns the extent at all — it supplies a
 /// texture and `bedrock_bake` fills it from here.
-constant float SK_BEDROCK_EXTENT = 40.0f;
+constant float SK_BEDROCK_EXTENT = 48.0f;
 
 // MARK: - Hashes
 //
@@ -133,20 +146,42 @@ inline float sk_rockDome(float2 p, float2 c, float r, float h) {
     return h * pow(k, 0.62f) * (0.80f + 0.36f * sk_vnoise(p * 1.7f));
 }
 
+/// The five headlands that frame the beach, as (x, z, radius, height) in metres.
+///
+/// One table, read twice: `sk_bedrock` raises the rock from it, and
+/// `sk_rockiness` reads the same five footprints to tell the loose sand not to
+/// cling to them. Those were two hand-copied lists of five literals until the
+/// domain widened and every one of the ten had to move by the same quarter.
+/// There is no version of this game where the rock and the mask of the rock are
+/// allowed to disagree about where the rock is, so they now cannot.
+constant float4 SK_HEADLANDS[5] = {
+    float4(-28.25f,   9.38f, 6.75f, 3.10f),
+    float4( 29.75f,  -1.88f, 6.00f, 2.70f),
+    float4(-24.50f, -24.38f, 7.75f, 1.55f),
+    float4( 22.75f, -26.25f, 6.50f, 1.95f),
+    float4( 32.50f,  13.75f, 4.00f, 2.10f)
+};
+
 /// The working ground: where the shore is flat, where the loose sand is deep,
 /// and where anything you build is worth counting. One function, so those three
 /// can never drift apart from one another.
 inline float sk_buildPad(float2 p) {
-    return smoothstep(23.0f, 15.0f, length((p - float2(0.0f, -7.0f)) * float2(1.0f, 0.92f)));
+    return smoothstep(29.0f, 19.0f, length((p - float2(0.0f, -7.0f)) * float2(1.0f, 0.92f)));
 }
 
 inline float sk_bedrock(float2 p) {
     float z = p.y;
+
+    // The shore slope, and the one thing in this function deliberately *not*
+    // scaled with the domain. It is written against z rather than against the
+    // domain edge, so widening the square extends the beach at both ends
+    // instead of tilting it: the still waterline stays at z ≈ −2 m, where every
+    // tide in the campaign was tuned against it.
     float y = 1.55f - 0.0705f * (z + 24.0f);
 
     // Landward dune ridge, pushed out past the working ground so the camera can
     // pull back over the whole of it without burying itself in a hill.
-    y += 3.35f * smoothstep(-21.5f, -31.0f, z) * (0.85f + 0.4f * sk_vnoise(p * 0.11f));
+    y += 3.35f * smoothstep(-27.0f, -39.0f, z) * (0.85f + 0.4f * sk_vnoise(p * 0.11f));
 
     float pad = sk_buildPad(p);
 
@@ -163,11 +198,10 @@ inline float sk_bedrock(float2 p) {
     y += rip * smoothstep(-8.0f, 4.0f, z) * (1.0f - 0.55f * pad);
 
     // Headlands, for framing.
-    y += sk_rockDome(p, float2(-22.6f,   7.5f), 5.4f, 3.10f);
-    y += sk_rockDome(p, float2( 23.8f,  -1.5f), 4.8f, 2.70f);
-    y += sk_rockDome(p, float2(-19.6f, -19.5f), 6.2f, 1.55f);
-    y += sk_rockDome(p, float2( 18.2f, -21.0f), 5.2f, 1.95f);
-    y += sk_rockDome(p, float2( 26.0f,  11.0f), 3.2f, 2.10f);
+    for (int i = 0; i < 5; ++i) {
+        float4 hl = SK_HEADLANDS[i];
+        y += sk_rockDome(p, hl.xy, hl.z, hl.w);
+    }
 
     return y;
 }
@@ -181,11 +215,10 @@ inline float sk_domeMask(float2 p, float2 c, float r) {
 }
 
 inline float sk_rockiness(float2 p) {
-    float m = sk_domeMask(p, float2(-22.6f,   7.5f), 5.4f);
-    m = max(m, sk_domeMask(p, float2( 23.8f,  -1.5f), 4.8f));
-    m = max(m, sk_domeMask(p, float2(-19.6f, -19.5f), 6.2f));
-    m = max(m, sk_domeMask(p, float2( 18.2f, -21.0f), 5.2f));
-    m = max(m, sk_domeMask(p, float2( 26.0f,  11.0f), 3.2f));
+    float m = 0.0f;
+    for (int i = 0; i < 5; ++i) {
+        m = max(m, sk_domeMask(p, SK_HEADLANDS[i].xy, SK_HEADLANDS[i].z));
+    }
     return m;
 }
 

@@ -60,19 +60,38 @@ final class SandSimulation {
 
     // MARK: Geometry
 
-    /// The simulated square, in metres. Matches `SK_DOMAIN` in Common.h.
-    static let domain = SIMD4<Float>(-24, -24, 48, 48)
+    /// Half-width of the simulated square, in metres. **Matches `SK_HALF` in
+    /// Common.h, and the two must be changed together.**
+    ///
+    /// This is the one number that says how big the beach is, and it is a knob
+    /// worth knowing about. Everything downstream of it scales on its own: the
+    /// shadow frustum is fitted to the domain, the terrain and water meshes are
+    /// parameterised over it, the metric reduction weights by cell area, and the
+    /// skirt carries whatever is left out to the horizon. What does *not* scale
+    /// on its own is the resolution — see `QualityTier.simResolution`, which is
+    /// sized to hold the cell at roughly an eighth of a metre — and the shape of
+    /// the shore in Common.h, whose working ground and headlands were moved out
+    /// to match when this went from 24 to 30.
+    static let halfExtent: Float = 30
+
+    /// The simulated square, in metres: minX, minZ, sizeX, sizeZ.
+    ///
+    /// Square, and it has to stay square. The solver takes its cell size from
+    /// `.z` alone and steps its eight neighbours in texel space, so a domain
+    /// wider than it is deep would silently give the two axes different metres
+    /// per cell and put a bias into every avalanche.
+    static let domain = SIMD4<Float>(-halfExtent, -halfExtent, halfExtent * 2, halfExtent * 2)
 
     /// Edge length of the baked hardpack table.
     ///
-    /// The *extent* it covers — ±40 m — is deliberately not here. It lives in
+    /// The *extent* it covers — ±48 m — is deliberately not here. It lives in
     /// Common.h as `SK_BEDROCK_EXTENT` and never crosses into Swift, because
     /// nothing on this side has an opinion about it: `bedrock_bake` reads the
     /// constant, sizes its grid from the texture it was handed, and the sampler
     /// inverts the same arithmetic. Swift's whole contribution is a square
-    /// texture. 1024² of RG32Float is 8 MB — a little over one sand field at
+    /// texture. 1024² of RG32Float is 8 MB — less than one sand field at
     /// Maximum — and unlike the sand it does not grow with the tier, because the
-    /// shore does not get bigger when the simulation does.
+    /// shore does not get more detailed when the simulation does.
     static let bedrockResolution = 1024
 
     let resolution: Int

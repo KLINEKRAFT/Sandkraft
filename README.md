@@ -64,6 +64,7 @@ Set your own team in Signing & Capabilities before running on a device.
 | Brush size | the slider | `[` and `]` |
 | Undo / redo | the buttons | ⌘Z / ⇧⌘Z |
 | Pause | the button | space |
+| Hide the controls | the ⛶ button | ⇧⌘H |
 
 There is no pan gesture on the phone, and that is deliberate: **the camera
 orbits the last place you touched the sand.** Work somewhere new and the pivot
@@ -85,6 +86,30 @@ most useful thing to know about this game:
 The difference between **Wet** and **Drip** is exactly this and nothing else.
 Players who never work that out spend the whole campaign confused about why
 their tower will not grow.
+
+### The beach is 60 m across
+
+A square of shore sixty metres on a side, simulated to the grain, with a flat
+working ground about fifty metres wide in the middle of it and the headlands
+outside that for framing. The cell is roughly an eighth of a metre at Balanced —
+that is the smallest feature a wall can have, and it is what the angle of repose
+is resolved against.
+
+One number sets it: `SandSimulation.halfExtent`, mirrored by `SK_DOMAIN` in
+`Shaders/Common.h`. Everything downstream scales on its own except the
+resolution, which is chosen per quality tier to hold the cell where it is.
+
+### Your work is kept
+
+The beach in front of you is written to an autosave slot every half minute that
+something has changed on it, and offered back as **Continue** the next time you
+launch. It is one slot and it is always the last beach — a way not to lose an
+afternoon, not a way to keep several. For that, ⌘S writes a `.sandkraft` file
+wherever you like, and ⌘O opens one.
+
+A saved beach only reopens at the quality it was saved at: the sand field is a
+different size at every tier, and resampling one is not something to do quietly
+to somebody's castle.
 
 ### Modes
 

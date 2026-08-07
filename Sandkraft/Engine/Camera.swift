@@ -21,13 +21,18 @@ import simd
 
 struct CameraLimits {
     var minDistance: Float = 4.5
-    var maxDistance: Float = 62
+    /// Far enough out to hold the whole of the widened square in frame at the
+    /// default field of view, and no further: past this the beach is a postage
+    /// stamp in the middle of an ocean.
+    var maxDistance: Float = 78
     /// Below about eight degrees the camera is inside the beach; above
     /// eighty-five it gimbal-locks and the horizon spins.
     var minElevation: Float = degreesToRadians(7)
     var maxElevation: Float = degreesToRadians(84)
     /// How far the focus point may wander from the middle of the working ground.
-    var targetRadius: Float = 26
+    /// Tracks `sk_buildPad`'s outer radius, so the pivot can reach every part of
+    /// the beach that is worth building on and no part that is not.
+    var targetRadius: Float = 32
 }
 
 final class Camera {
@@ -35,13 +40,13 @@ final class Camera {
     // MARK: Desired state
 
     var targetPoint = SIMD3<Float>(0, 0, -4)
-    var desiredDistance: Float = 22
+    var desiredDistance: Float = 27
     var desiredAzimuth: Float = degreesToRadians(-90)      // looking out to sea
     var desiredElevation: Float = degreesToRadians(26)
 
     // MARK: Smoothed state
 
-    private var distance = Spring(22, response: 0.32)
+    private var distance = Spring(27, response: 0.32)
     private var azimuth = Spring(degreesToRadians(-90), response: 0.24)
     private var elevation = Spring(degreesToRadians(26), response: 0.24)
     private var smoothedTarget = SIMD3<Float>(0, 0, -4)

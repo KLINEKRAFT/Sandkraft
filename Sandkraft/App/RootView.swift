@@ -26,6 +26,12 @@ final class AppEngine {
     private(set) var state: State = .loading
     let model = GameModel()
 
+    /// The autosaved beach, if there is one and it fits this session's
+    /// simulation resolution. Read once at boot: the file does not change while
+    /// we are the ones writing it, and the title screen asking the disk a
+    /// question on every body evaluation would be a strange way to find out.
+    private(set) var restorableBeach: BeachHeader?
+
     func boot() {
         guard case .loading = state else { return }
         do {
@@ -42,6 +48,15 @@ final class AppEngine {
             model.qualityTier = tier
             let renderer = try Renderer(context: context, tier: tier)
             let coordinator = SceneCoordinator(renderer: renderer, model: model)
+
+            // Offered, never imposed. Continuing puts back a beach the player
+            // may well have finished with, and there is no way to tell from here
+            // which it was — so the title screen asks.
+            if let header = BeachStore.storedHeader(),
+               header.simResolution == renderer.simulation.resolution {
+                restorableBeach = header
+            }
+
             state = .ready(coordinator)
         } catch {
             state = .failed(error.localizedDescription)
@@ -56,9 +71,20 @@ final class AppEngine {
         do {
             try coordinator.renderer.apply(tier: tier)
             coordinator.resetBeach()
+            // The stored beach was written at the old resolution, so it can no
+            // longer be loaded into this session. Dropping the offer here is
+            // what stops Continue from being a button that reports an error.
+            restorableBeach = nil
         } catch {
             state = .failed(error.localizedDescription)
         }
+    }
+
+    /// Continuing consumes the offer. It is a door back into one session, not a
+    /// checkpoint to keep returning to — the beach it restores is live from the
+    /// moment it lands, and Resume is what comes back to it after that.
+    func consumeRestorableBeach() {
+        restorableBeach = nil
     }
 }
 
@@ -66,6 +92,7 @@ struct RootView: View {
     @State private var engine = AppEngine()
     @State private var showingTitle = true
     @State private var startedSession = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -78,19 +105,40 @@ struct RootView: View {
                 FailureView(message: message)
 
             case .ready(let coordinator):
+                // Barely touched while the title is up. The old settings — 55%
+                // opacity under a fourteen-point blur — turned the beach into a
+                // smear behind a sheet of glass, which is exactly the look the
+                // title screen was rewritten to get away from. The scrim in
+                // TitleView does the legibility work now, and it only does it
+                // where the words are.
                 PlayView(model: engine.model, coordinator: coordinator)
-                    .opacity(showingTitle ? 0.55 : 1)
-                    .blur(radius: showingTitle ? 14 : 0)
+                    .opacity(showingTitle ? 0.85 : 1)
+                    .blur(radius: showingTitle ? 4 : 0)
                     .allowsHitTesting(!showingTitle)
 
                 if showingTitle {
                     // Resume appears only once there is something to resume. The
-                    // beach is still there, untouched, behind the blur — the
+                    // beach is still there, untouched, behind the scrim — the
                     // title is an overlay, not a teardown.
+                    //
+                    // Continue is the other half of that, across launches rather
+                    // than within one: it appears only before the first session,
+                    // because after that Resume is the same door and the better
+                    // word for it.
                     TitleView(model: engine.model,
+                              storedBeach: startedSession ? nil : engine.restorableBeach,
                               onResume: startedSession
                                   ? { withAnimation(.skSlow) { showingTitle = false } }
-                                  : nil) { mode, tide in
+                                  : nil,
+                              onContinue: {
+                                  guard coordinator.restoreAutosavedBeach() else {
+                                      engine.consumeRestorableBeach()
+                                      return
+                                  }
+                                  engine.consumeRestorableBeach()
+                                  startedSession = true
+                                  withAnimation(.skSlow) { showingTitle = false }
+                              }) { mode, tide in
                         engine.model.start(mode: mode, tide: tide)
                         coordinator.resetBeach()
                         startedSession = true
@@ -112,6 +160,13 @@ struct RootView: View {
         // dragged does not mean a slider being written sixty times a second.
         .onChange(of: engine.model.preferences) { _, latest in
             Preferences.save(latest)
+        }
+        // Leaving the app is the one moment the thirty-second autosave timer
+        // cannot help with, so ask for one on the way out. It may not land —
+        // see `requestAutosave` — which is exactly why it is not the mechanism.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase != .active, case .ready(let coordinator) = engine.state else { return }
+            coordinator.requestAutosave()
         }
         #if os(macOS)
         .frame(minWidth: 900, minHeight: 620)

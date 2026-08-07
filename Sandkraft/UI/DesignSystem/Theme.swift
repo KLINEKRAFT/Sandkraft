@@ -50,7 +50,12 @@ enum Metric {
 
     static let railHeight: CGFloat = 78
     static let sidebarWidth: CGFloat = 96
-    static let inspectorWidth: CGFloat = 300
+    /// The objectives panel. Three hundred points was a column wide enough to
+    /// set a paragraph in, and what it holds is three short lines and a number —
+    /// so it was three hundred points of beach spent on air. It is also the
+    /// widest single thing on screen during a tide, which makes it the first
+    /// place to look when the answer to "can the play area be wider" is yes.
+    static let inspectorWidth: CGFloat = 264
 }
 
 // MARK: - Palette
