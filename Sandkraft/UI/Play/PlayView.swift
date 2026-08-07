@@ -112,7 +112,38 @@ struct PlayView: View {
         #endif
     }
 
+    // MARK: - Body
+    //
+    // Built in four stages rather than as one chain, and this is a correctness
+    // matter rather than a tidiness one.
+    //
+    // Swift type-checks a whole expression at once, and it gives itself a
+    // *wall-clock* budget to do it in. A SwiftUI `body` is one expression no
+    // matter how many lines it is spread over: every modifier is a generic
+    // function returning an opaque type that the next one takes as input, so a
+    // chain of twenty is a single inference problem with twenty nested unknowns
+    // in it. That problem grows far faster than the chain does.
+    //
+    // This one went over. Not everywhere — it compiled on a fast machine and on
+    // CI and failed on a slower laptop, which is the worst way for it to fail,
+    // because the budget is in seconds rather than in anything about the code.
+    // "The compiler is unable to type-check this expression in reasonable time"
+    // is what that looks like, and it is a build error, not a warning.
+    //
+    // Each stage below is its own expression with its own budget, and the four
+    // together are nowhere near it. The order of the modifiers is exactly what
+    // it was — order is behaviour in SwiftUI, and this refactor is not allowed
+    // to be a behaviour change.
+
     var body: some View {
+        let scene = layers
+        let withSheets = sheetHandling(scene)
+        let withHints = hintObservers(withSheets)
+        let withFiles = fileHandling(withHints)
+        return settingsObservers(withFiles)
+    }
+
+    private var layers: some View {
         ZStack {
             MetalSceneView(coordinator: coordinator)
                 .ignoresSafeArea()
@@ -142,6 +173,10 @@ struct PlayView: View {
         }
         .animation(.skSlow, value: model.phase)
         .animation(.skSnap, value: chromeHidden)
+    }
+
+    private func sheetHandling<V: View>(_ content: V) -> some View {
+        content
         .onChange(of: sheet) { old, new in
             if old != nil, new == nil { sheetIsDismissing = true }
         }
@@ -160,6 +195,10 @@ struct PlayView: View {
         }
         .skCommandRouting(model: model, coordinator: coordinator,
                           sheet: $sheet, chromeHidden: $chromeHidden)
+    }
+
+    private func hintObservers<V: View>(_ content: V) -> some View {
+        content
         .onChange(of: model.selectedToolID) { _, newValue in
             showHint(Tool.tool(newValue).summary)
         }
@@ -175,18 +214,33 @@ struct PlayView: View {
         // hand behaves and show nothing at all while doing it. A switch you
         // cannot see the state of is a switch you flip by accident and then
         // spend five minutes blaming the sand for.
+        //
+        // Both messages are bound to a `String` before they reach `showHint`,
+        // for the reason `BrushSizeEditor.stepButton` gives at length: a ternary
+        // of two string *literals* has to be disambiguated against the
+        // `LocalizedStringKey` overload, and handing the type-checker that bet
+        // several times in one expression is part of how this file ran out of
+        // budget in the first place.
         .onChange(of: model.straightStrokes) { _, on in
-            showHint(on ? "Straight strokes on — a stroke locks to eight directions."
-                        : "Straight strokes off.")
+            let text: String = on
+                ? "Straight strokes on — a stroke locks to eight directions."
+                : "Straight strokes off."
+            showHint(text)
         }
         .onChange(of: model.snapToGrid) { _, on in
-            showHint(on ? String(format: "Grid on — %.2f m.", model.snapSpacing)
-                        : "Grid off.")
+            let text: String = on
+                ? String(format: "Grid on — %.2f m.", model.snapSpacing)
+                : "Grid off."
+            showHint(text)
         }
         .onAppear {
             model.reducedMotion = reduceMotion
             coordinator.haptics.enabled = model.hapticsEnabled
         }
+    }
+
+    private func fileHandling<V: View>(_ content: V) -> some View {
+        content
         // Watched as a Bool rather than as the `Data` itself: `onChange` compares
         // old against new on every body evaluation, and that would mean an
         // equality check over several megabytes of PNG for every frame the
@@ -246,6 +300,10 @@ struct PlayView: View {
                 showHint("That beach could not be opened.")
             }
         }
+    }
+
+    private func settingsObservers<V: View>(_ content: V) -> some View {
+        content
         .onChange(of: model.beachMessage != nil) { _, hasMessage in
             guard hasMessage, let message = model.beachMessage else { return }
             showHint(message)
