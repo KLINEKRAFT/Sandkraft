@@ -125,6 +125,13 @@ struct SandkraftCommands: Commands {
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
             Divider()
+            // Not "Enter Full Screen" — the window is already whatever size it
+            // is. This puts the interface away and leaves the beach.
+            Button("Hide the controls") {
+                NotificationCenter.default.post(name: .skToggleChrome, object: nil)
+            }
+            .keyboardShortcut("h", modifiers: [.command, .shift])
+            Divider()
             Button("Next look") {
                 NotificationCenter.default.post(name: .skCycleLook, object: 1)
             }
@@ -160,6 +167,7 @@ extension Notification.Name {
     static let skSaveBeach = Notification.Name("sk.saveBeach")
     static let skOpenBeach = Notification.Name("sk.openBeach")
     static let skTogglePause = Notification.Name("sk.togglePause")
+    static let skToggleChrome = Notification.Name("sk.toggleChrome")
     static let skResetBeach = Notification.Name("sk.resetBeach")
     static let skCycleLook = Notification.Name("sk.cycleLook")
     static let skShowFieldNotes = Notification.Name("sk.showFieldNotes")

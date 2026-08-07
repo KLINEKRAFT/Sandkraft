@@ -85,7 +85,15 @@ enum BeachDocumentFormat {
         return out
     }
 
-    static func decode(_ data: Data) throws -> (header: BeachHeader, field: Data) {
+    /// The header alone, and how many bytes of the file it accounted for.
+    ///
+    /// Split out from `decode` so that a caller holding only the first few
+    /// kilobytes of a file — the autosave slot being probed at launch, where
+    /// reading several megabytes of sand to find out whether it is loadable at
+    /// all would be silly — runs exactly the same parser as a caller holding the
+    /// whole of one. Two parsers for one format is how the second one ends up
+    /// trusting a length the first one checks.
+    static func decodeHeader(_ data: Data) throws -> (header: BeachHeader, fieldStart: Int) {
         // Every read below is bounds-checked before it happens. This parses a
         // file the user chose from disk, which is to say a file that can contain
         // anything at all, including a length field that claims four gigabytes.
@@ -100,16 +108,30 @@ enum BeachDocumentFormat {
         let headerEnd = headerStart + headerLength
         guard headerLength > 0, headerEnd <= data.count else { throw Failure.damaged }
 
+        // Indices relative to `startIndex`, not to zero. A `Data` that arrived
+        // as a slice of another one does not start at zero, and subscripting it
+        // as though it did traps rather than misreads.
+        let base = data.startIndex
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard let header = try? decoder.decode(BeachHeader.self,
-                                               from: data.subdata(in: headerStart..<headerEnd)) else {
+        guard let header = try? decoder.decode(
+            BeachHeader.self,
+            from: data.subdata(in: (base + headerStart)..<(base + headerEnd))
+        ) else {
             throw Failure.damaged
         }
+        guard header.simResolution > 0 else { throw Failure.damaged }
 
-        let field = data.subdata(in: headerEnd..<data.count)
+        return (header, headerEnd)
+    }
+
+    static func decode(_ data: Data) throws -> (header: BeachHeader, field: Data) {
+        let (header, fieldStart) = try decodeHeader(data)
+
+        let base = data.startIndex
+        let field = data.subdata(in: (base + fieldStart)..<data.endIndex)
         let expected = header.simResolution * header.simResolution * 16
-        guard header.simResolution > 0, field.count == expected else { throw Failure.damaged }
+        guard field.count == expected else { throw Failure.damaged }
 
         return (header, field)
     }

@@ -90,8 +90,8 @@ evaluations and two sines describing ground that never moves, and almost
 everything asked for it several times over: the terrain fragment differenced it
 four times to rebuild the macro normal, the water fragment five, and the solver
 nine times per texel per substep. It is now baked once into a 1024² RG32Float
-table — hardpack in `.r`, the loose bed in `.g` — covering ±40 m, which is the
-48 m simulated square plus every headland with room to spare.
+table — hardpack in `.r`, the loose bed in `.g` — covering ±48 m, which is the
+60 m simulated square plus every headland with room to spare.
 
 Three things about that table are load-bearing:
 
@@ -128,7 +128,7 @@ edge that is a soft coverage ramp instead of a hard discard.
 **The shadow frustum is fitted to the beach, not the view.** Fitting to the view
 frustum is textbook and would be wrong here: the map would resize and re-orient
 every time the camera moved, and a texel grid crawling across a static sandcastle
-is far more distracting than the resolution it buys. The playable area is 48 m
+is far more distracting than the resolution it buys. The playable area is 60 m
 square and never moves, so the light matrix depends only on the sun.
 
 **Fixed-point atomics for particle deposit.** Atomic float add is not available
@@ -158,13 +158,22 @@ Every change to `Sim.metal` has to preserve both:
 
 | | Battery | Balanced | Detail | Maximum |
 |---|---|---|---|---|
-| Simulation | 256² | 384² | 512² | 640² |
-| Terrain grid | 256 | 320 | 448 | 576 |
-| Shadow map | 1024² | 1536² | 2048² | 2048² |
+| Simulation | 320² | 448² | 576² | 704² |
+| Cell | 18.8 cm | 13.4 cm | 10.4 cm | 8.5 cm |
+| Terrain grid | 224 | 336 | 448 | 560 |
+| Shadow map | 1280² | 1792² | 2048² | 2560² |
 | Substeps | 2 | 3 | 4 | 5 |
 | Particles | 8k | 20k | 48k | 96k |
-| Render scale | 0.90× | 1.00× | 1.15× | 1.30× |
+| Render scale | 0.85× | 1.00× | 1.10× | 1.25× |
 | Undo depth | 6 | 8 | 12 | 16 |
+
+The simulation row is the one that is not free to be any number. It is chosen so
+the **cell** — the third row, and the row that actually matters — stays at
+roughly an eighth of a metre across the middle two tiers: the cell is the
+smallest feature a wall can have, and it is what the angle of repose is resolved
+against. When the beach went from 48 m to 60 m these went up by a quarter to
+follow it. They are also all multiples of sixteen, because `metrics_partial`
+reduces across a 16 × 16 threadgroup.
 
 Chosen automatically from `MTLDevice.supportsFamily`, overridable in Settings.
 Changing tier rebuilds the simulation, which lays down a fresh beach — the

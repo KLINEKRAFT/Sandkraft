@@ -83,6 +83,10 @@ struct PlayView: View {
 
     @State private var sheet: PlaySheet?
     @State private var showObjectives = true
+    /// Everything off but the sand. The beach has always been full-bleed behind
+    /// the panels; this is the difference between a beach you can see all of and
+    /// one with four hundred points of glass parked on top of it.
+    @State private var chromeHidden = false
     @State private var hint: String?
     @State private var hintTask: Task<Void, Never>?
     @State private var photo: PhotoDocument?
@@ -107,7 +111,9 @@ struct PlayView: View {
                 .accessibilityLabel("The beach")
                 .accessibilityHint("Drag with one finger to use the selected tool. Drag with two to move the camera.")
 
-            if isCompact {
+            if chromeHidden {
+                revealControl
+            } else if isCompact {
                 compactLayout
             } else {
                 regularLayout
@@ -126,11 +132,13 @@ struct PlayView: View {
             }
         }
         .animation(.skSlow, value: model.phase)
+        .animation(.skSnap, value: chromeHidden)
         .sheet(item: $sheet) { which in
             // The sheet supplies its own platform chrome; see `skSheetChrome`.
             PlaySheetContent(which: which, model: model)
         }
-        .skCommandRouting(model: model, coordinator: coordinator, sheet: $sheet)
+        .skCommandRouting(model: model, coordinator: coordinator,
+                          sheet: $sheet, chromeHidden: $chromeHidden)
         .onChange(of: model.selectedToolID) { _, newValue in
             showHint(Tool.tool(newValue).summary)
         }
@@ -217,6 +225,24 @@ struct PlayView: View {
 
     // MARK: - Layouts
 
+    /// What is left when everything is hidden: one button, in the corner the
+    /// tool rail is not in. Deliberately not *nothing* — a mode with no way out
+    /// of it that is not a keyboard shortcut is a trap on a phone.
+    private var revealControl: some View {
+        VStack {
+            HStack {
+                Spacer(minLength: 0)
+                IconButton(glyph: .collapse, label: "Show the controls", size: 38, glyphSize: 17) {
+                    chromeHidden = false
+                }
+                .opacity(0.55)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(Metric.l)
+        .transition(.opacity)
+    }
+
     private var compactLayout: some View {
         VStack(spacing: 0) {
             StatusStrip(model: model, compact: true)
@@ -232,7 +258,9 @@ struct PlayView: View {
                         .transition(.move(edge: .leading).combined(with: .opacity))
                 }
                 Spacer(minLength: 0)
-                QuickControls(model: model, coordinator: coordinator, sheet: $sheet, vertical: true)
+                QuickControls(model: model, coordinator: coordinator, sheet: $sheet,
+                              chromeHidden: $chromeHidden, showObjectives: $showObjectives,
+                              vertical: true)
                     .padding(.trailing, Metric.l)
                     .padding(.top, Metric.m)
             }
@@ -252,6 +280,13 @@ struct PlayView: View {
         .animation(.skSnap, value: showObjectives)
     }
 
+    /// The rail and the inspector are laid out beside the middle column rather
+    /// than over it, which is what keeps the status strip and the hint from
+    /// sliding underneath them. The scene itself is behind all three and always
+    /// was: it is the ZStack's first layer, full-bleed, and none of this crops
+    /// it. What the panels cost is *sight of* the beach, which is why both ends
+    /// of this row can now be put away — the objectives with their own button,
+    /// everything at once with `chromeHidden`.
     private var regularLayout: some View {
         HStack(spacing: 0) {
             ToolRail(model: model, sheet: $sheet, axis: .vertical)
@@ -262,7 +297,9 @@ struct PlayView: View {
                 HStack(alignment: .top, spacing: Metric.m) {
                     StatusStrip(model: model, compact: false)
                     Spacer(minLength: Metric.l)
-                    QuickControls(model: model, coordinator: coordinator, sheet: $sheet, vertical: false)
+                    QuickControls(model: model, coordinator: coordinator, sheet: $sheet,
+                                  chromeHidden: $chromeHidden, showObjectives: $showObjectives,
+                                  vertical: false)
                 }
                 .padding(.horizontal, Metric.l)
                 .padding(.top, Metric.l)
@@ -274,7 +311,7 @@ struct PlayView: View {
                 }
             }
 
-            if model.phase.isTimed {
+            if model.phase.isTimed && showObjectives {
                 ObjectiveStack(model: model, compact: false)
                     .frame(width: Metric.inspectorWidth)
                     .padding(.trailing, Metric.l)
@@ -283,6 +320,7 @@ struct PlayView: View {
             }
         }
         .animation(.skSnap, value: hint)
+        .animation(.skSnap, value: showObjectives)
     }
 
     private func showHint(_ text: String) {
@@ -408,6 +446,8 @@ struct QuickControls: View {
     @Bindable var model: GameModel
     let coordinator: SceneCoordinator
     @Binding var sheet: PlaySheet?
+    @Binding var chromeHidden: Bool
+    @Binding var showObjectives: Bool
     var vertical: Bool
 
     @Environment(\.skReturnToTitle) private var returnToTitle
@@ -426,10 +466,22 @@ struct QuickControls: View {
             }
             IconButton(glyph: .camera, label: "Photograph") { model.takePhoto() }
             IconButton(glyph: .layers, label: "Look") { sheet = .look }
+
+            // Only during a tide, because outside one there is nothing in the
+            // panel to hide.
+            if model.phase.isTimed {
+                IconButton(glyph: .tide,
+                           label: showObjectives ? "Hide the objectives" : "Show the objectives") {
+                    showObjectives.toggle()
+                }
+                .opacity(showObjectives ? 1 : 0.55)
+            }
+
             IconButton(glyph: model.isPaused ? .play : .pause,
                        label: model.isPaused ? "Resume" : "Pause") {
                 model.isPaused.toggle()
             }
+            IconButton(glyph: .expand, label: "Hide the controls") { chromeHidden = true }
             IconButton(glyph: .settings, label: "Settings") { sheet = .settings }
             // `skReturnToTitle` has been in the environment since the first
             // build and nothing ever read it, so there was no way back to the
@@ -536,7 +588,10 @@ struct ToolRail: View {
             }
             .padding(.horizontal, 2)
         }
-        .frame(height: 60)
+        // Six points off the tool strip is six points of beach back on a phone,
+        // where the rail is the single largest thing between the player and the
+        // sand. The chips were never sixty points tall; the frame was.
+        .frame(height: 54)
     }
 
     /// What the current tool needs beyond itself: a mould, an adornment, or a

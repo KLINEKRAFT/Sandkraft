@@ -339,6 +339,15 @@ struct SettingsView: View {
                      """)
                     .font(.skCaption)
                     .foregroundStyle(Palette.secondaryText)
+                Text("""
+                     The beach in front of you is also kept automatically, every \
+                     half minute that something has changed on it, and offered \
+                     back as Continue the next time you launch. That slot holds \
+                     one beach and it is always the last one — it is a way not to \
+                     lose an afternoon, not a way to keep several.
+                     """)
+                    .font(.skCaption)
+                    .foregroundStyle(Palette.secondaryText)
             }
 
             Section("Stored") {
@@ -366,6 +375,10 @@ struct SettingsView: View {
                             titleVisibility: .visible) {
             Button("Reset", role: .destructive) {
                 Preferences.reset()
+                // The autosaved beach goes with it. "A clean slate" that leaves
+                // the last castle sitting behind Continue is not one, and this
+                // is the only button in the app that offers to throw work away.
+                BeachStore.clear()
                 // The model has to be put back too. It is the source the save
                 // reads from, so clearing only the store would see every old
                 // value written straight back on the next change.
@@ -526,6 +539,7 @@ struct ControlsReference: View {
             Row(keys: "⇧⌘P", what: "Photograph the frame as it stands"),
             Row(keys: "Space", what: "Pause"),
             Row(keys: "⇧⌘R", what: "Reset the beach"),
+            Row(keys: "⇧⌘H", what: "Hide the controls — the beach, and nothing else"),
             Row(keys: "⌘L", what: "Next look"),
             Row(keys: "⇧⌘L", what: "Previous look")
         ]))

@@ -29,6 +29,7 @@ enum Glyph: String, Hashable {
 
     // Interface
     case undo, redo, camera, tide, sun, cloud, layers, settings, close, play, pause, restart, info
+    case expand, collapse
 }
 
 /// Draws a glyph into a 24×24 box, scaled to fit whatever rect it is given.
@@ -383,6 +384,20 @@ struct GlyphShape: Shape {
             circle(12, 12, 9)
             move(12, 10.6); line(12, 16.6)
             circle(12, 7.6, 0.35)
+
+        // Corner brackets, opening outward: give the beach the whole screen.
+        case .expand:
+            move(4, 9);   line(4, 4);   line(9, 4)
+            move(15, 4);  line(20, 4);  line(20, 9)
+            move(20, 15); line(20, 20); line(15, 20)
+            move(9, 20);  line(4, 20);  line(4, 15)
+
+        // The same brackets, closing inward: give the controls back.
+        case .collapse:
+            move(4, 9);   line(9, 9);   line(9, 4)
+            move(15, 4);  line(15, 9);  line(20, 9)
+            move(20, 15); line(15, 15); line(15, 20)
+            move(9, 20);  line(9, 15);  line(4, 15)
         }
 
         return p

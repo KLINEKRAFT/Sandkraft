@@ -61,21 +61,34 @@ enum QualityTier: Int, CaseIterable, Identifiable, Codable, Sendable {
     }
 
     /// Edge length of the square sand texture. Everything else scales off this.
+    ///
+    /// These went up by a quarter when the beach did, so the cell stays where it
+    /// was — a 60 m square at 448² is 13.4 cm per cell, which is the same sand
+    /// the 48 m square gave at 384². A wider beach at the old resolutions would
+    /// have been a coarser one, and coarse sand is a different game: the cell is
+    /// the smallest feature a wall can have, and it is what the angle of repose
+    /// is resolved against.
+    ///
+    /// Multiples of sixteen, because `metrics_partial` reduces across a 16 × 16
+    /// threadgroup and a resolution that is not a multiple of it wastes a whole
+    /// row and column of threads on the bounds check.
     var simResolution: Int {
         switch self {
-        case .low:    return 256
-        case .medium: return 384
-        case .high:   return 512
-        case .ultra:  return 640
+        case .low:    return 320
+        case .medium: return 448
+        case .high:   return 576
+        case .ultra:  return 704
         }
     }
 
+    /// The shadow map is fitted to the domain, so a wider beach spreads the same
+    /// texels over more ground. Raised to hold roughly the old texel density.
     var shadowResolution: Int {
         switch self {
-        case .low:    return 1024
-        case .medium: return 1536
+        case .low:    return 1280
+        case .medium: return 1792
         case .high:   return 2048
-        case .ultra:  return 2048
+        case .ultra:  return 2560
         }
     }
 
@@ -116,14 +129,16 @@ enum QualityTier: Int, CaseIterable, Identifiable, Codable, Sendable {
     /// nothing else.
     var terrainGrid: Int {
         switch self {
-        case .low:    return 192
-        case .medium: return 288
-        case .high:   return 384
-        case .ultra:  return 480
+        case .low:    return 224
+        case .medium: return 336
+        case .high:   return 448
+        case .ultra:  return 560
         }
     }
 
-    /// The coarse sheet that carries the coast out to ±340 m.
+    /// The coarse sheet that carries the coast out to ±340 m. Barely moved: it
+    /// covers the same distance it always did, and a wider simulated square only
+    /// means the skirt has slightly less of it to draw.
     var skirtGrid: Int {
         switch self {
         case .low:    return 128
@@ -135,10 +150,10 @@ enum QualityTier: Int, CaseIterable, Identifiable, Codable, Sendable {
 
     var waterGrid: Int {
         switch self {
-        case .low:    return 144
-        case .medium: return 176
-        case .high:   return 208
-        case .ultra:  return 240
+        case .low:    return 160
+        case .medium: return 200
+        case .high:   return 240
+        case .ultra:  return 272
         }
     }
 
