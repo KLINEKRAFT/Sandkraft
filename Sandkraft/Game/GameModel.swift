@@ -306,6 +306,20 @@ final class GameModel {
     /// is the one that makes a wall straight; the grid only makes it *placed*.
     var straightStrokes = false
 
+    /// Shift, held right now. Transient — never written to preferences, because
+    /// a modifier key is not a setting.
+    var straightStrokeOverride = false
+
+    /// Whether the stroke in progress is actually being straightened.
+    ///
+    /// Exclusive-or, not "or", and the difference is the whole point of having a
+    /// modifier at all. Shift **inverts** the setting rather than forcing it on:
+    /// with the toggle off, holding shift draws a straight line; with the toggle
+    /// on, holding shift lets you draw freehand for one stroke without going
+    /// back to Settings to get it. One operator, both directions, and it is what
+    /// every drawing program has done with shift for thirty years.
+    var strokesAreStraight: Bool { straightStrokes != straightStrokeOverride }
+
     /// The eight directions, as a step in radians. Eight rather than four
     /// because a castle wants corners and diagonals, and rather than sixteen
     /// because a direction you cannot feel yourself snapping to is one that
@@ -372,7 +386,12 @@ final class GameModel {
     /// — and differ only in who receives the bytes, so they are one request with
     /// a destination rather than two mechanisms.
     enum SaveDestination: Equatable, Sendable {
-        /// To a file the player picks, through `fileExporter`.
+        /// Onto the shelf, under a name, with no panel and no interruption.
+        /// This is what ⌘S does now.
+        case library(name: String)
+        /// To a file the player picks, through `fileExporter`. Still here,
+        /// because handing a castle to somebody else is a real thing to want and
+        /// a file is how you do it — it is just no longer the only door.
         case export
         /// To the autosave slot, silently.
         case autosave
@@ -394,9 +413,20 @@ final class GameModel {
     /// handed a piece of the play screen's state.
     var openBeachWanted = false
 
+    /// Keep this beach in the game, under a name. An empty name means "you
+    /// choose" and gets a timestamp.
+    func saveBeachToLibrary(named name: String = "") {
+        saveWanted = .library(name: name)
+    }
+
+    /// Write this beach out to a file the player picks.
     func saveBeach() {
         saveWanted = .export
     }
+
+    /// Set by the library when it has loaded something, so the sheet it was
+    /// presented in gets out of the way of the beach it just put on screen.
+    var dismissSheetsWanted = false
 
     /// Ask for an autosave, unless a save the player asked for out loud is
     /// already queued. A readback is a readback; there is no reason to do two in
@@ -789,12 +819,13 @@ final class GameModel {
     /// Only X and Z move. The height comes off the GPU pick and belongs to the
     /// sand; moving it would put the brush somewhere the beach is not.
     private func drafted(_ sample: StrokeSample, anchoredTo anchor: StrokeSample?) -> StrokeSample {
-        guard snapToGrid || straightStrokes else { return sample }
+        let straight = strokesAreStraight
+        guard snapToGrid || straight else { return sample }
 
         var out = sample
         var p = SIMD2<Float>(sample.world.x, sample.world.z)
 
-        if straightStrokes, let anchor {
+        if straight, let anchor {
             let origin = SIMD2<Float>(anchor.world.x, anchor.world.z)
             let delta = p - origin
             let reach = length(delta)

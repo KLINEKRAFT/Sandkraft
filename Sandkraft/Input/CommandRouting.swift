@@ -49,6 +49,14 @@ struct CommandRouting: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .skOpenBeach)) { _ in
                 model.openBeach()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .skKeepBeach)) { _ in
+                // No name and no dialog. ⌘S is a reflex, and a reflex that
+                // stops to ask a question is one people stop using.
+                model.saveBeachToLibrary()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .skShowBeaches)) { _ in
+                sheet = .beaches
+            }
             .onReceive(NotificationCenter.default.publisher(for: .skTogglePause)) { _ in
                 model.isPaused.toggle()
             }

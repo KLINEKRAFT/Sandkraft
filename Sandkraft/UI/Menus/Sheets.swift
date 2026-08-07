@@ -14,7 +14,7 @@ import SwiftUI
 // MARK: - Routing
 
 enum PlaySheet: String, Identifiable {
-    case mould, adornment, look, settings, fieldNotes
+    case mould, adornment, look, beaches, settings, fieldNotes
 
     var id: String { rawValue }
 
@@ -23,6 +23,7 @@ enum PlaySheet: String, Identifiable {
         case .mould:      return "Moulds"
         case .adornment:  return "Adornments"
         case .look:       return "Looks"
+        case .beaches:    return "Beaches"
         case .settings:   return "Settings"
         case .fieldNotes: return "Field Notes"
         }
@@ -63,6 +64,7 @@ struct PlaySheetContent: View {
                 case .mould:      MouldPicker(model: model)
                 case .adornment:  AdornmentPicker(model: model)
                 case .look:       LookPicker(model: model)
+                case .beaches:    BeachesView(model: model)
                 case .settings:   SettingsView(model: model)
                 case .fieldNotes: FieldNotesView()
                 }
@@ -77,7 +79,7 @@ struct PlaySheetContent: View {
                 }
             }
         }
-        .skSheetChrome(large: which == .settings || which == .fieldNotes)
+        .skSheetChrome(large: which == .settings || which == .fieldNotes || which == .beaches)
     }
 }
 
@@ -459,22 +461,17 @@ struct SettingsView: View {
 
     private var beachSection: some View {
         Section("This beach") {
-            // Both of these close Settings on the way out, and they have to:
-            // the file panel they ask for cannot be put up while this sheet
-            // is still on screen. See `PlayView.present(_:)` — the request
-            // is queued and goes up as this sheet finishes leaving.
-            Button("Save this beach…") {
-                model.saveBeach()
-                dismiss()
-            }
-            Button("Open a beach…") {
-                model.openBeach()
-                dismiss()
+            // A push rather than a second sheet. `BeachesView` is reached from
+            // here and from ⌘O, and presenting a sheet from inside a sheet is
+            // the exact shape of bug that made Save do nothing for months.
+            NavigationLink("Kept beaches") {
+                BeachesView(model: model)
+                    .navigationTitle("Beaches")
             }
             Text("""
-                 A saved beach keeps the sand exactly as it stands, along \
+                 A kept beach holds the sand exactly as it stands, along \
                  with the adornments, the look and the time of day. It \
-                 reopens as a sandbox, and only at the quality it was saved \
+                 reopens as a sandbox, and only at the quality it was kept \
                  at — the field is a different size at every tier.
                  """)
                 .font(.skCaption)
@@ -484,7 +481,8 @@ struct SettingsView: View {
                  half minute that something has changed on it, and offered \
                  back as Continue the next time you launch. That slot holds \
                  one beach and it is always the last one — it is a way not to \
-                 lose an afternoon, not a way to keep several.
+                 lose an afternoon, not a way to keep several. Keeping several \
+                 is what the shelf above is for.
                  """)
                 .font(.skCaption)
                 .foregroundStyle(Palette.secondaryText)
@@ -654,8 +652,10 @@ struct ControlsReference: View {
         ]))
 
         all.append(Block(title: "The beach", rows: [
-            Row(keys: "⌘S", what: "Save this beach"),
-            Row(keys: "⌘O", what: "Open a saved beach"),
+            Row(keys: "⌘S", what: "Keep this beach, in the game, no panel"),
+            Row(keys: "⌘O", what: "The shelf of kept beaches"),
+            Row(keys: "⇧⌘S", what: "Export this beach to a file"),
+            Row(keys: "⌥⌘O", what: "Import a beach from a file"),
             Row(keys: "⇧⌘P", what: "Photograph the frame as it stands"),
             Row(keys: "Space", what: "Pause"),
             Row(keys: "⇧⌘R", what: "Reset the beach"),

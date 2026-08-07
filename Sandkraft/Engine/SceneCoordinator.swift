@@ -153,10 +153,18 @@ final class SceneCoordinator: NSObject, ObservableObject {
     private func approximateGroundHeight(at p: SIMD2<Float>) -> Float {
         // Mirrors sk_bedrock's dune and pad terms without the headlands, which the
         // camera is clamped away from anyway.
+        //
+        // **These four numbers are copies of ones in Common.h and have to move
+        // when those do.** They did not, when the beach went from ±24 m to
+        // ±30 m: this kept the old pad and the old dune for a release, so the
+        // camera was being kept out of a beach shaped differently to the one on
+        // screen — floating over the widened working ground and dipping into the
+        // new dune. It is only a clamp, so it failed quietly, which is exactly
+        // why it is worth a comment shouting about.
         let z = p.y
         var y: Float = 1.55 - 0.0705 * (z + 24)
-        y += 3.35 * smoothstepf(-21.5, -31.0, z) * 0.95
-        let pad = smoothstepf(23, 15, length((p - SIMD2(0, -7)) * SIMD2(1, 0.92)))
+        y += 3.35 * smoothstepf(-27.0, -39.0, z) * 0.95
+        let pad = smoothstepf(29, 19, length((p - SIMD2(0, -7)) * SIMD2(1, 0.92)))
         y -= 0.98 * pad
         return y + 0.9 * pad          // roughly the loose bed sitting on top
     }
@@ -305,6 +313,14 @@ final class SceneCoordinator: NSObject, ObservableObject {
         renderer.camera.isInteracting = false
     }
 
+    /// Shift, held. Routed through here rather than set on the model directly,
+    /// because the input layer's whole contract is that it talks to the
+    /// coordinator and never reaches past it into game state.
+    func setStraightOverride(_ held: Bool) {
+        guard model.straightStrokeOverride != held else { return }
+        model.straightStrokeOverride = held
+    }
+
     func rotateMould(by radians: Float) {
         mouldRotation += radians
 
@@ -313,7 +329,7 @@ final class SceneCoordinator: NSObject, ObservableObject {
         // makes it land on absolute multiples of fifteen degrees — snapping each
         // delta would round a hundred tiny twists to zero and the mould would
         // never turn at all.
-        if model.straightStrokes {
+        if model.strokesAreStraight {
             let step = GameModel.mouldRotationStepDegrees * .pi / 180
             mouldRotation = (mouldRotation / step).rounded() * step
         }
@@ -459,12 +475,20 @@ final class SceneCoordinator: NSObject, ObservableObject {
             let field = Data(bytes: staging.contents(), count: byteCount)
             let document = try? BeachDocumentFormat.encode(header: header, field: field)
 
-            // The autosave is written here, off the main actor, because it is
-            // several megabytes going to disk and nothing is waiting on it. An
-            // export goes back to the main actor instead — the thing waiting on
-            // that one is a file panel.
-            if destination == .autosave, let document {
-                BeachStore.write(document)
+            // Both of the destinations that end on disk are written here, off
+            // the main actor, because they are several megabytes going to a file
+            // and nothing on screen is waiting for them. An export goes back to
+            // the main actor instead — the thing waiting on that one is a panel.
+            var savedAs: String?
+            switch destination {
+            case .autosave:
+                if let document { BeachStore.write(document) }
+            case .library(let name):
+                if let document {
+                    savedAs = BeachLibrary.write(document, name: name)
+                }
+            case .export:
+                break
             }
 
             DispatchQueue.main.async {
@@ -476,6 +500,16 @@ final class SceneCoordinator: NSObject, ObservableObject {
                             model.pendingBeach = document
                         } else {
                             model.beachMessage = "The beach could not be written."
+                        }
+                    case .library:
+                        // The name is echoed back because `write` may not have
+                        // used the one it was given — a second `Big keep` becomes
+                        // `Big keep 2`, and being told that is the difference
+                        // between a save you can find again and one you cannot.
+                        if let savedAs {
+                            model.beachMessage = "Kept as “\(savedAs)”."
+                        } else {
+                            model.beachMessage = "That beach could not be kept."
                         }
                     case .autosave:
                         if document != nil { self?.beachDirty = false }
