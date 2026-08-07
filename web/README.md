@@ -32,6 +32,12 @@ npx vercel deploy --prod
 
 Set the project root to `web/` if you deploy from the repository root instead.
 
+`vercel.json` marks `/src/*` as `must-revalidate`. The shader modules *are* the
+app, and a cached `main.js` against a freshly deployed `shaders/` is a black
+screen with no error in the console. (The rule is not a comment in that file
+because Vercel validates `vercel.json` strictly and JSON has no comments — an
+unknown key fails the deploy.)
+
 Adding it to an iPhone Home Screen gives you a full-screen launcher with no
 Safari chrome, which is most of the way to feeling like an app without being
 one. It is still a web page: no App Store listing, no push, no haptics.
