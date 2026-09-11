@@ -70,8 +70,10 @@ struct CommandRouting: ViewModifier {
         content
             .onReceive(NotificationCenter.default.publisher(for: .skKeepBeach)) { _ in
                 // No name and no dialog. ⌘S is a reflex, and a reflex that stops
-                // to ask a question is one people stop using.
-                model.saveBeachToLibrary()
+                // to ask a question is one people stop using. After the first
+                // one it saves over the same beach rather than breeding
+                // timestamps.
+                model.quickSaveBeach()
             }
             .onReceive(NotificationCenter.default.publisher(for: .skShowBeaches)) { _ in
                 sheet = .beaches
@@ -116,6 +118,9 @@ struct CommandRouting: ViewModifier {
         content
             .onReceive(NotificationCenter.default.publisher(for: .skToggleChrome)) { _ in
                 chromeHidden.toggle()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .skCentreView)) { _ in
+                coordinator.centreView()
             }
             .onReceive(NotificationCenter.default.publisher(for: .skShowFieldNotes)) { _ in
                 sheet = .fieldNotes

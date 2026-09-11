@@ -151,6 +151,13 @@ struct SandkraftCommands: Commands {
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
             Divider()
+            // Zero, because the tool shortcuts have taken 1 through 9 and 0, and
+            // ⌘0 is "actual size" in every app that has ever had a zoom.
+            Button("Centre the beach") {
+                NotificationCenter.default.post(name: .skCentreView, object: nil)
+            }
+            .keyboardShortcut("0", modifiers: [.command])
+            Divider()
             // Not "Enter Full Screen" — the window is already whatever size it
             // is. This puts the interface away and leaves the beach.
             Button("Hide the controls") {
@@ -196,6 +203,7 @@ extension Notification.Name {
     static let skOpenBeach = Notification.Name("sk.openBeach")
     static let skTogglePause = Notification.Name("sk.togglePause")
     static let skToggleChrome = Notification.Name("sk.toggleChrome")
+    static let skCentreView = Notification.Name("sk.centreView")
     static let skToggleSnapToGrid = Notification.Name("sk.toggleSnapToGrid")
     static let skToggleStraightStrokes = Notification.Name("sk.toggleStraightStrokes")
     static let skResetBeach = Notification.Name("sk.resetBeach")

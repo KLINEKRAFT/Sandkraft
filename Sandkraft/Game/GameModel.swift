@@ -387,8 +387,9 @@ final class GameModel {
     /// a destination rather than two mechanisms.
     enum SaveDestination: Equatable, Sendable {
         /// Onto the shelf, under a name, with no panel and no interruption.
-        /// This is what ⌘S does now.
-        case library(name: String)
+        /// This is what ⌘S does now. `overwrite` replaces a beach of that name
+        /// rather than counting up beside it.
+        case library(name: String, overwrite: Bool)
         /// To a file the player picks, through `fileExporter`. Still here,
         /// because handing a castle to somebody else is a real thing to want and
         /// a file is how you do it — it is just no longer the only door.
@@ -413,10 +414,35 @@ final class GameModel {
     /// handed a piece of the play screen's state.
     var openBeachWanted = false
 
+    /// The beach this session is working *on*, if it came from the shelf or has
+    /// been put there. What ⌘S saves over.
+    ///
+    /// Deliberately not persisted. It is a fact about this session, not a
+    /// setting, and a launch that quietly aimed ⌘S at whatever you were doing
+    /// last week would be a bad surprise held for a long time.
+    private(set) var currentBeachName: String?
+
+    func noteCurrentBeach(_ name: String?) {
+        currentBeachName = name
+    }
+
     /// Keep this beach in the game, under a name. An empty name means "you
     /// choose" and gets a timestamp.
-    func saveBeachToLibrary(named name: String = "") {
-        saveWanted = .library(name: name)
+    func saveBeachToLibrary(named name: String = "", overwrite: Bool = false) {
+        saveWanted = .library(name: name, overwrite: overwrite)
+    }
+
+    /// ⌘S. Saves over the beach you are working on, or starts one if you are not
+    /// working on one yet.
+    ///
+    /// This is the behaviour every document has and no game should have to
+    /// explain: the first ⌘S makes a save, and every ⌘S after it updates that
+    /// save rather than leaving you with `Beach 14.02`, `Beach 14.06`,
+    /// `Beach 14.11` and no idea which is which. Use the shelf to keep a copy on
+    /// purpose.
+    func quickSaveBeach() {
+        saveBeachToLibrary(named: currentBeachName ?? "",
+                           overwrite: currentBeachName != nil)
     }
 
     /// Write this beach out to a file the player picks.
@@ -901,9 +927,45 @@ final class GameModel {
         }
     }
 
-    /// Seconds of holding to fill a mould completely. Ready to turn out at 35% of
-    /// it, so about four tenths of a second of contact.
-    static let mouldFillSeconds: Double = 1.1
+    /// Seconds of holding to grow a mould to its full height.
+    ///
+    /// Longer than the old fill time, because it is doing a different job: it
+    /// used to be a wait before anything happened, and it is now a control you
+    /// are actively steering. Two and a bit seconds is long enough to aim a
+    /// height and short enough that a tall turret is not a chore.
+    static let mouldGrowSeconds: Double = 2.2
+
+    /// How tall the turret comes out, as a multiple of the mould's own height.
+    ///
+    /// A tap gives half height rather than nothing: pressing a mould against the
+    /// sand and getting no turret at all reads as the tool being broken, and the
+    /// old 35% threshold did exactly that to anybody who clicked rather than
+    /// held.
+    var mouldHeightScale: Double { 0.5 + 1.5 * mouldFillProgress }
+
+    /// The pail's say in how tall it can be.
+    ///
+    /// The mould now *adds* sand rather than moving it, which makes it a source
+    /// — and an ungated source would make the pail meter a decoration and the
+    /// tide objectives free. So it is gated exactly as Pour and Drip are, by the
+    /// same ramp, with the same sandbox exemption: on the open shore the
+    /// argument is with the tide, not with the bucket.
+    private var mouldPailScale: Double {
+        guard mode != .shore else { return 1 }
+        return min(pailVolume / 0.6, 1)
+    }
+
+    /// What the next turret will actually stand, in metres. Shown while holding,
+    /// because a control you cannot read is a control you cannot aim.
+    var mouldPendingHeight: Double {
+        mould.height * mouldHeightScale * mouldPailScale
+    }
+
+    /// True while a mould is being grown, which is when the height readout is
+    /// worth screen space and never otherwise.
+    var isChargingMould: Bool {
+        isStroking && selectedToolID == .mould
+    }
 
     /// Filling a mould is a function of *time*, not of pointer movement.
     ///
@@ -916,13 +978,15 @@ final class GameModel {
     private func fillMould(dt: Double) {
         guard isStroking, tool.id == .mould, let sample = strokeCurrent else { return }
 
-        mouldFillProgress = min(mouldFillProgress + dt / Self.mouldFillSeconds, 1)
+        mouldFillProgress = min(mouldFillProgress + dt / Self.mouldGrowSeconds, 1)
 
         // What the mould takes is what comes back out, wetness included. Framerate
         // independent, so a fast machine does not average differently to a slow one.
         let blend = min(dt * 6.0, 1.0)
         mouldCharge.moisture = mouldCharge.moisture * (1 - blend) + Double(sample.moisture) * blend
-        mouldCharge.ready = mouldFillProgress > 0.35
+        // Any deliberate press turns something out. The threshold is only here
+        // to swallow the stray click that lands and lifts in one frame.
+        mouldCharge.ready = mouldFillProgress > 0.02
     }
 
     func endStroke() {
@@ -980,9 +1044,16 @@ final class GameModel {
 
         switch t.id {
         case .mould:
-            // Holding the mould down scoops rather than pours.
-            brush.mode = .scoop
-            brush.parameter = 1
+            // **The mould does not dig.** It used to scoop while held, which was
+            // volume-honest — what went into the bucket came back out — and
+            // completely wrong to use: you aimed a turret, held, and watched the
+            // ground you were aiming at sink into a crater. By the time it turned
+            // out, the shape stood in a hole of its own making.
+            //
+            // So the mould touches nothing until it is released. Where the sand
+            // comes from is the pail, on exactly the terms Pour already uses:
+            // see `mouldPailScale`.
+            return nil
         case .place:
             return nil
         default:
@@ -1015,7 +1086,7 @@ final class GameModel {
         var stamp = MouldStamp()
         stamp.position = SIMD2(world.x, world.z)
         stamp.radius = Float(m.radius * brushScale)
-        stamp.height = Float(m.height)
+        stamp.height = Float(mouldPendingHeight)
         stamp.detail = Float(m.detail)
         stamp.baseY = world.y
         stamp.rotation = rotation

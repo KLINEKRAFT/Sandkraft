@@ -39,17 +39,34 @@ final class Camera {
 
     // MARK: Desired state
 
-    var targetPoint = SIMD3<Float>(0, 0, -4)
-    var desiredDistance: Float = 27
-    var desiredAzimuth: Float = degreesToRadians(-90)      // looking out to sea
-    var desiredElevation: Float = degreesToRadians(26)
+    // MARK: Home
+    //
+    // Where the camera starts, and where "centre the beach" puts it back.
+    // Stated once as constants rather than four times as literals: the initial
+    // values, the springs and `recentre` all read them, so the view you get on
+    // launch and the view you get from ⌘0 cannot drift apart.
+    //
+    // The Z is −7 rather than 0 because the *beach* is not centred on the
+    // origin: `sk_buildPad` puts the working ground at (0, −7), so that is what
+    // centred means here. Framing the origin would put a quarter of the view
+    // out to sea.
+
+    static let homeZ: Float = -7
+    static let homeDistance: Float = 27
+    static let homeAzimuth: Float = degreesToRadians(-90)   // looking out to sea
+    static let homeElevation: Float = degreesToRadians(26)
+
+    var targetPoint = SIMD3<Float>(0, 0, Camera.homeZ)
+    var desiredDistance: Float = Camera.homeDistance
+    var desiredAzimuth: Float = Camera.homeAzimuth
+    var desiredElevation: Float = Camera.homeElevation
 
     // MARK: Smoothed state
 
-    private var distance = Spring(27, response: 0.32)
-    private var azimuth = Spring(degreesToRadians(-90), response: 0.24)
-    private var elevation = Spring(degreesToRadians(26), response: 0.24)
-    private var smoothedTarget = SIMD3<Float>(0, 0, -4)
+    private var distance = Spring(Camera.homeDistance, response: 0.32)
+    private var azimuth = Spring(Camera.homeAzimuth, response: 0.24)
+    private var elevation = Spring(Camera.homeElevation, response: 0.24)
+    private var smoothedTarget = SIMD3<Float>(0, 0, Camera.homeZ)
 
     var limits = CameraLimits()
 
@@ -163,6 +180,21 @@ final class Camera {
     func focus(on point: SIMD3<Float>) {
         targetPoint.x = point.x
         targetPoint.z = point.z
+    }
+
+    /// Back to the view the game opens on.
+    ///
+    /// Sets the desired values and lets the springs carry it there, rather than
+    /// snapping. Snapping is for a tide starting or a save loading, where the
+    /// beach underneath has changed and a glide would be a lie about continuity.
+    /// Here the beach is the same beach and you are asking to look at it from
+    /// where you started — which is a movement, and should look like one.
+    func recentre() {
+        targetPoint.x = 0
+        targetPoint.z = Self.homeZ
+        desiredDistance = Self.homeDistance
+        desiredAzimuth = Self.homeAzimuth
+        desiredElevation = Self.homeElevation
     }
 
     // MARK: - Matrices

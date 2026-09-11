@@ -313,6 +313,11 @@ final class SceneCoordinator: NSObject, ObservableObject {
         renderer.camera.isInteracting = false
     }
 
+    /// Put the view back where the game opens it.
+    func centreView() {
+        renderer.camera.recentre()
+    }
+
     /// Shift, held. Routed through here rather than set on the model directly,
     /// because the input layer's whole contract is that it talks to the
     /// coordinator and never reaches past it into game state.
@@ -483,9 +488,9 @@ final class SceneCoordinator: NSObject, ObservableObject {
             switch destination {
             case .autosave:
                 if let document { BeachStore.write(document) }
-            case .library(let name):
+            case .library(let name, let overwrite):
                 if let document {
-                    savedAs = BeachLibrary.write(document, name: name)
+                    savedAs = BeachLibrary.write(document, name: name, overwrite: overwrite)
                 }
             case .export:
                 break
@@ -501,13 +506,16 @@ final class SceneCoordinator: NSObject, ObservableObject {
                         } else {
                             model.beachMessage = "The beach could not be written."
                         }
-                    case .library:
+                    case .library(_, let overwrite):
                         // The name is echoed back because `write` may not have
                         // used the one it was given — a second `Big keep` becomes
                         // `Big keep 2`, and being told that is the difference
                         // between a save you can find again and one you cannot.
                         if let savedAs {
-                            model.beachMessage = "Kept as “\(savedAs)”."
+                            model.beachMessage = overwrite ? "Saved over “\(savedAs)”."
+                                                           : "Kept as “\(savedAs)”."
+                            // From here on, ⌘S means *this* beach.
+                            model.noteCurrentBeach(savedAs)
                         } else {
                             model.beachMessage = "That beach could not be kept."
                         }

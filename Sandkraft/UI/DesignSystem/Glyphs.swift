@@ -29,7 +29,7 @@ enum Glyph: String, Hashable {
 
     // Interface
     case undo, redo, camera, tide, sun, cloud, layers, settings, close, play, pause, restart, info
-    case expand, collapse, beaches
+    case expand, collapse, beaches, centre
 }
 
 /// Draws a glyph into a 24×24 box, scaled to fit whatever rect it is given.
@@ -398,6 +398,15 @@ struct GlyphShape: Shape {
             move(15, 4);  line(15, 9);  line(20, 9)
             move(20, 15); line(15, 15); line(15, 20)
             move(9, 20);  line(9, 15);  line(4, 15)
+
+        // A reticle over a mark: put the view back on the middle of the beach.
+        case .centre:
+            circle(12, 12, 6.2)
+            move(12, 1.6); line(12, 5)
+            move(12, 19); line(12, 22.4)
+            move(1.6, 12); line(5, 12)
+            move(19, 12); line(22.4, 12)
+            circle(12, 12, 1.2)
 
         // The shelf: three castles in a row, reduced to their battlements.
         // Not a folder or a floppy disk — this game does not have documents,

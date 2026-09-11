@@ -365,7 +365,10 @@ struct PlayView: View {
 
             Spacer(minLength: 0)
 
-            if let hint {
+            if model.isChargingMould {
+                MouldChargeBubble(model: model)
+                    .padding(.bottom, Metric.s)
+            } else if let hint {
                 HintBubble(text: hint)
                     .padding(.bottom, Metric.s)
             }
@@ -404,7 +407,9 @@ struct PlayView: View {
 
                 Spacer(minLength: 0)
 
-                if let hint {
+                if model.isChargingMould {
+                    MouldChargeBubble(model: model).padding(.bottom, Metric.l)
+                } else if let hint {
                     HintBubble(text: hint).padding(.bottom, Metric.l)
                 }
             }
@@ -612,6 +617,7 @@ struct QuickControls: View {
                     coordinator.redo()
                 }
                 IconButton(glyph: .camera, label: "Photograph") { model.takePhoto() }
+                IconButton(glyph: .centre, label: "Centre the beach") { coordinator.centreView() }
             }
 
             Group {
@@ -797,6 +803,43 @@ struct ToolRail: View {
         default:
             BrushSizeChip(model: model, axis: axis)
         }
+    }
+}
+
+/// How tall the turret will be, while you are holding the mould down.
+///
+/// It sits where the hint bubble sits and displaces it, because the two are
+/// never both worth reading: a hint is something the game is telling you, and
+/// this is something you are steering. Without it "hold longer for taller" is a
+/// rule you have to discover by building six turrets and comparing them.
+struct MouldChargeBubble: View {
+    @Bindable var model: GameModel
+
+    var body: some View {
+        VStack(spacing: Metric.xs) {
+            HStack(spacing: Metric.s) {
+                GlyphView(glyph: model.mould.glyph, size: 15, weight: 1.6)
+                    .foregroundStyle(model.mouldWillHold ? Palette.accent : Palette.danger)
+                Text(String(format: "%.2f m", model.mouldPendingHeight))
+                    .font(.skNumeric(14, weight: .medium))
+                    .contentTransition(.numericText())
+                if !model.mouldWillHold {
+                    Text("too dry")
+                        .font(Typeface.font(11, .regular))
+                        .foregroundStyle(Palette.danger)
+                }
+            }
+            MeterBar(value: model.mouldFillProgress,
+                     tint: model.mouldWillHold ? Palette.accent : Palette.danger,
+                     height: 4)
+                .frame(width: 120, height: 4)
+        }
+        .padding(.horizontal, Metric.l)
+        .padding(.vertical, Metric.s)
+        .skPanel(radius: Metric.radiusLarge, material: .thinMaterial)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Mould height")
+        .accessibilityValue(String(format: "%.2f metres", model.mouldPendingHeight))
     }
 }
 
